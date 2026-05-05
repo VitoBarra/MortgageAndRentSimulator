@@ -6,7 +6,7 @@ from rental import calculate_monthly_rental_income, calculate_net_rental_income
 
 def build_room_scenarios(
     max_rooms: int,
-    rent_per_room: float,
+    rent_per_room: float | list[float],
     occupancy_rate: float,
     rental_tax_rate: float,
     monthly_payment: float,
@@ -38,7 +38,6 @@ def build_rate_scenarios(
     years: int,
     rates: list[float],
     net_rent: float,
-    monthly_costs: float,
 ) -> pd.DataFrame:
     rows = []
 
@@ -48,7 +47,7 @@ def build_rate_scenarios(
             {
                 "annual_rate": annual_rate,
                 "monthly_payment": monthly_payment,
-                "cashflow": net_rent - monthly_payment - monthly_costs,
+                "net_rent": net_rent,
             }
         )
 
