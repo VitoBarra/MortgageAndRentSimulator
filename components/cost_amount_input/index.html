@@ -4,7 +4,6 @@
     <meta charset="UTF-8" />
     <style>
       :root {
-        color-scheme: light dark;
         --primary-color: rgb(255, 75, 75);
         --background-color: rgb(255, 255, 255);
         --secondary-background-color: rgb(240, 242, 246);
@@ -22,7 +21,9 @@
         box-sizing: border-box;
       }
 
+      html,
       body {
+        background: var(--background-color);
         margin: 0;
       }
 
@@ -142,18 +143,6 @@
         margin-top: 0.3rem;
       }
 
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --background-color: rgb(14, 17, 23);
-          --secondary-background-color: rgb(38, 39, 48);
-          --text-color: rgb(250, 250, 250);
-          --border-color: rgba(250, 250, 250, 0.2);
-          --divider-color: rgba(250, 250, 250, 0.12);
-          --button-hover-background-color: color-mix(in srgb, var(--primary-color) 30%, transparent);
-          --muted-text-color: rgba(250, 250, 250, 0.65);
-          --disabled-text-color: color-mix(in srgb, var(--text-color) 55%, transparent);
-        }
-      }
     </style>
   </head>
   <body>
@@ -203,7 +192,10 @@
 
       const setTheme = (theme = {}) => {
         const root = document.documentElement;
-        if (theme.primaryColor) root.style.setProperty("--primary-color", theme.primaryColor);
+        if (theme.primaryColor) {
+          root.style.setProperty("--primary-color", theme.primaryColor);
+          root.style.setProperty("--button-hover-background-color", theme.primaryColor);
+        }
         if (theme.backgroundColor) root.style.setProperty("--background-color", theme.backgroundColor);
         if (theme.secondaryBackgroundColor) {
           root.style.setProperty("--secondary-background-color", theme.secondaryBackgroundColor);
@@ -212,7 +204,8 @@
         if (theme.borderColor) root.style.setProperty("--divider-color", theme.borderColor);
         if (theme.textColor) {
           root.style.setProperty("--text-color", theme.textColor);
-          root.style.setProperty("--muted-text-color", theme.textColor);
+          root.style.setProperty("--muted-text-color", `color-mix(in srgb, ${theme.textColor} 65%, transparent)`);
+          root.style.setProperty("--disabled-text-color", `color-mix(in srgb, ${theme.textColor} 55%, transparent)`);
         }
         if (theme.font) root.style.fontFamily = theme.font;
       };

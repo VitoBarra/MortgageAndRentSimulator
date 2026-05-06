@@ -4,7 +4,6 @@
     <meta charset="UTF-8" />
     <style>
       :root {
-        color-scheme: light dark;
         --primary-color: rgb(255, 75, 75);
         --background-color: rgb(255, 255, 255);
         --secondary-background-color: rgb(240, 242, 246);
@@ -19,7 +18,9 @@
         box-sizing: border-box;
       }
 
+      html,
       body {
+        background: var(--background-color);
         margin: 0;
       }
 
@@ -67,15 +68,6 @@
         width: 1.15rem;
       }
 
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --background-color: rgb(14, 17, 23);
-          --secondary-background-color: rgb(38, 39, 48);
-          --text-color: rgb(250, 250, 250);
-          --border-color: rgba(250, 250, 250, 0.2);
-          --button-hover-background-color: color-mix(in srgb, var(--primary-color) 30%, transparent);
-        }
-      }
     </style>
   </head>
   <body>
@@ -122,7 +114,10 @@
 
       const setTheme = (theme = {}) => {
         const root = document.documentElement;
-        if (theme.primaryColor) root.style.setProperty("--primary-color", theme.primaryColor);
+        if (theme.primaryColor) {
+          root.style.setProperty("--primary-color", theme.primaryColor);
+          root.style.setProperty("--button-hover-background-color", theme.primaryColor);
+        }
         if (theme.backgroundColor) root.style.setProperty("--background-color", theme.backgroundColor);
         if (theme.secondaryBackgroundColor) {
           root.style.setProperty("--secondary-background-color", theme.secondaryBackgroundColor);
