@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: "Source Sans Pro", sans-serif;
+      }
+
+      body {
+        margin: 0;
+      }
+
+      .controls {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        padding-top: 0.25rem;
+      }
+
+      button {
+        border: 1px solid rgba(49, 51, 63, 0.2);
+        border-radius: 0.5rem;
+        background: rgb(255, 255, 255);
+        color: rgb(49, 51, 63);
+        cursor: pointer;
+        font-size: 1.1rem;
+        line-height: 1;
+        min-height: 2.35rem;
+        width: 100%;
+      }
+
+      button:hover {
+        border-color: rgb(255, 75, 75);
+        color: rgb(255, 75, 75);
+      }
+
+      button:active {
+        background: rgba(255, 75, 75, 0.08);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        button {
+          background: rgb(38, 39, 48);
+          color: rgb(250, 250, 250);
+          border-color: rgba(250, 250, 250, 0.2);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="controls">
+      <button
+        type="button"
+        data-direction="invest"
+        title="Move surplus from repayment to investment. Shift: 15%, Ctrl/Cmd: 30%."
+      >
+        →
+      </button>
+      <button
+        type="button"
+        data-direction="repay"
+        title="Move surplus from investment to repayment. Shift: 15%, Ctrl/Cmd: 30%."
+      >
+        ←
+      </button>
+    </div>
+
+    <script>
+      const streamlitMessage = (type, data = {}) => {
+        window.parent.postMessage(
+          {
+            isStreamlitMessage: true,
+            type,
+            ...data,
+          },
+          "*",
+        );
+      };
+
+      const setHeight = () => {
+        streamlitMessage("streamlit:setFrameHeight", {
+          height: document.documentElement.scrollHeight,
+        });
+      };
+
+      const getStep = (event) => {
+        if (event.ctrlKey || event.metaKey) {
+          return 30;
+        }
+        if (event.shiftKey) {
+          return 15;
+        }
+        return 5;
+      };
+
+      document.querySelectorAll("button").forEach((button) => {
+        button.addEventListener("click", (event) => {
+          streamlitMessage("streamlit:setComponentValue", {
+            dataType: "json",
+            value: {
+              direction: button.dataset.direction,
+              step: getStep(event),
+              id: `${Date.now()}-${Math.random()}`,
+            },
+          });
+        });
+      });
+
+      window.addEventListener("message", (event) => {
+        if (event.data.type === "streamlit:render") {
+          setHeight();
+        }
+      });
+
+      streamlitMessage("streamlit:componentReady", { apiVersion: 1 });
+      setHeight();
+    </script>
+  </body>
+</html>

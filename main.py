@@ -1,6 +1,8 @@
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+import streamlit.components.v1 as components
+from pathlib import Path
 
 from mortgage import (
     build_standard_schedule,
@@ -9,7 +11,13 @@ from mortgage import (
     simulate_combined_repayment,
 )
 from rental import calculate_monthly_rental_income, calculate_net_rental_income
-from scenarios import build_room_scenarios, build_rate_scenarios
+from scenarios import build_room_scenarios
+
+
+allocation_buttons = components.declare_component(
+    "allocation_buttons",
+    path=str(Path(__file__).parent / "components" / "allocation_buttons"),
+)
 
 
 def coerce_positive_float(value: object) -> float:
@@ -18,38 +26,95 @@ def coerce_positive_float(value: object) -> float:
     return max(float(value), 0)
 
 
+def future_value_lump_sum(amount: float, annual_return: float, years: int) -> float:
+    return amount * (1 + annual_return / 100) ** years
+
+
+def future_value_monthly(amount: float, annual_return: float, years: int) -> float:
+    return future_value_monthly_for_months(amount, annual_return, years * 12)
+
+
+def future_value_monthly_for_months(
+    amount: float,
+    annual_return: float,
+    months: int,
+) -> float:
+    if months <= 0:
+        return 0
+
+    monthly_return = annual_return / 100 / 12
+    if monthly_return == 0:
+        return amount * months
+
+    return amount * (((1 + monthly_return) ** months - 1) / monthly_return)
+
+
+def money(value: float) -> str:
+    return f"€{value:,.0f}"
+
+
 st.set_page_config(
     page_title="Mortgage Simulator",
     page_icon="🏠",
     layout="wide",
 )
 
-
 st.title("Mortgage Simulator")
 
-with st.sidebar:
-    st.header("Purchase")
-    house_price = st.number_input(
-        "House price",
-        min_value=50_000,
-        max_value=500_000,
-        value=140_000,
-        step=5_000,
-        format="%d",
-    )
-    mortgage_percent = st.slider("Mortgage percentage", 50, 100, 100, 5)
-    annual_rate = st.slider("Annual interest rate", 1.0, 8.0, 3.5, 0.1)
-    years = st.slider("Mortgage duration", 10, 35, 30, 1)
+summary_area = st.container()
+purchase_area = st.container()
+room_area = st.container()
+repayment_area = st.container()
+details_area = st.container()
 
-    st.header("Initial Costs")
-    notary_cost = st.number_input("Notary", min_value=0, value=3_000, step=250)
-    istruttoria_cost = st.number_input("Istruttoria", min_value=0, value=800, step=100)
-    appraisal_cost = st.number_input("Perizia", min_value=0, value=300, step=50)
-    agency_cost = st.number_input("Agency", min_value=0, value=0, step=250)
-    purchase_taxes = st.number_input("Purchase taxes", min_value=0, value=1_500, step=250)
-    renovation_cost = st.number_input("Renovation", min_value=0, value=0, step=1_000)
-    other_initial_costs = st.number_input("Other initial costs", min_value=0, value=0, step=100)
+with purchase_area:
+    st.divider()
+    st.subheader("Purchase And Mortgage")
+    purchase_controls_col, purchase_chart_col = st.columns([0.52, 0.48])
 
+    with purchase_controls_col:
+        purchase_col1, purchase_col2 = st.columns(2)
+        house_price = purchase_col1.number_input(
+            "House price",
+            min_value=50_000,
+            max_value=500_000,
+            value=140_000,
+            step=5_000,
+            format="%d",
+        )
+        mortgage_percent = purchase_col2.slider("Mortgage percentage", 50, 100, 100, 5)
+        annual_rate = purchase_col1.slider("Annual interest rate", 1.0, 8.0, 3.5, 0.1)
+        years = purchase_col2.slider("Mortgage duration", 10, 35, 30, 1)
+
+        st.subheader("Initial Costs")
+        cost_col1, cost_col2, cost_col3 = st.columns(3)
+        notary_cost = cost_col1.number_input("Notary", min_value=0, value=3_000, step=250)
+        istruttoria_cost = cost_col2.number_input(
+            "Istruttoria",
+            min_value=0,
+            value=800,
+            step=100,
+        )
+        appraisal_cost = cost_col3.number_input("Perizia", min_value=0, value=300, step=50)
+        agency_cost = cost_col1.number_input("Agency", min_value=0, value=0, step=250)
+        purchase_taxes = cost_col2.number_input(
+            "Purchase taxes",
+            min_value=0,
+            value=1_500,
+            step=250,
+        )
+        renovation_cost = cost_col3.number_input(
+            "Renovation",
+            min_value=0,
+            value=0,
+            step=1_000,
+        )
+        other_initial_costs = cost_col1.number_input(
+            "Other initial costs",
+            min_value=0,
+            value=0,
+            step=100,
+        )
 
 mortgage_amount = house_price * mortgage_percent / 100
 down_payment = house_price - mortgage_amount
@@ -66,9 +131,30 @@ upfront_cash_needed = down_payment + initial_fixed_costs
 monthly_payment = calculate_monthly_payment(mortgage_amount, annual_rate, years)
 total_interest = calculate_total_interest(mortgage_amount, annual_rate, years)
 
-metrics_area = st.container()
-summary_area = st.container()
-room_area = st.container()
+initial_costs = pd.DataFrame(
+    [
+        ("Down payment", down_payment),
+        ("Notary", notary_cost),
+        ("Istruttoria", istruttoria_cost),
+        ("Perizia", appraisal_cost),
+        ("Agency", agency_cost),
+        ("Purchase taxes", purchase_taxes),
+        ("Renovation", renovation_cost),
+        ("Other initial costs", other_initial_costs),
+    ],
+    columns=["Cost", "Amount"],
+)
+
+with purchase_chart_col:
+    st.subheader("Upfront Cost Split")
+    upfront_fig = px.pie(
+        initial_costs[initial_costs["Amount"] > 0],
+        names="Cost",
+        values="Amount",
+        hole=0.45,
+    )
+    upfront_fig.update_traces(textposition="inside", textinfo="percent+label")
+    st.plotly_chart(upfront_fig, use_container_width=True)
 
 with room_area:
     st.divider()
@@ -147,134 +233,80 @@ with room_area:
         fig.update_layout(showlegend=False, yaxis_tickprefix="€")
         st.plotly_chart(fig, use_container_width=True)
 
-with summary_area:
+with repayment_area:
     st.divider()
-    summary_chart_col, summary_table_col = st.columns([0.46, 0.54])
+    st.subheader("Surplus Allocation")
+    combined_controls_col, combined_chart_col = st.columns([0.36, 0.64])
 
-with summary_chart_col:
-    st.subheader("Upfront Cost Split")
-    initial_costs = pd.DataFrame(
-        [
-            ("Down payment", down_payment),
-            ("Notary", notary_cost),
-            ("Istruttoria", istruttoria_cost),
-            ("Perizia", appraisal_cost),
-            ("Agency", agency_cost),
-            ("Purchase taxes", purchase_taxes),
-            ("Renovation", renovation_cost),
-            ("Other initial costs", other_initial_costs),
-        ],
-        columns=["Cost", "Amount"],
-    )
-    upfront_fig = px.pie(
-        initial_costs[initial_costs["Amount"] > 0],
-        names="Cost",
-        values="Amount",
-        hole=0.45,
-    )
-    upfront_fig.update_traces(textposition="inside", textinfo="percent+label")
-    st.plotly_chart(upfront_fig, use_container_width=True)
+    with combined_controls_col:
+        st.caption(
+            "Rent first covers the normal mortgage payment and monthly operating costs. The remaining cashflow is fully allocated between early repayment and investment."
+        )
+        if "surplus_repayment_share" not in st.session_state:
+            st.session_state.surplus_repayment_share = 100
 
-with summary_table_col:
-    st.subheader("Scenario Summary")
-    summary = pd.DataFrame(
-        [
-            ("House price", house_price),
-            ("Down payment", down_payment),
-            ("Initial fixed costs", initial_fixed_costs),
-            ("Upfront cash needed", upfront_cash_needed),
-            ("Mortgage amount", mortgage_amount),
-            ("Monthly payment", monthly_payment),
-            ("Total interest", total_interest),
-            ("Rented rooms", rooms),
-            ("Room prices total", sum(room_prices[:rooms])),
-            ("Gross rent", gross_rent),
-            ("Net rent after tax", net_rent),
-            ("Monthly operating costs", monthly_costs),
-            ("Cashflow before costs", cashflow_before_costs),
-            ("Cashflow after costs", cashflow_after_costs),
-        ],
-        columns=["Item", "Amount"],
-    )
-    summary["Amount"] = summary.apply(
-        lambda row: f"{int(row['Amount'])}"
-        if row["Item"] == "Rented rooms"
-        else f"€{row['Amount']:,.0f}",
-        axis=1,
-    )
-    st.dataframe(summary, hide_index=True, use_container_width=True)
+        allocation_left_col, allocation_buttons_col, allocation_right_col = st.columns(
+            [0.42, 0.16, 0.42]
+        )
+        with allocation_buttons_col:
+            allocation_click = allocation_buttons(key="surplus_allocation_buttons")
+            if allocation_click:
+                click_id = allocation_click.get("id")
+                if click_id != st.session_state.get("last_surplus_allocation_click"):
+                    st.session_state.last_surplus_allocation_click = click_id
+                    step = int(allocation_click.get("step", 5))
+                    if allocation_click.get("direction") == "invest":
+                        st.session_state.surplus_repayment_share = max(
+                            st.session_state.surplus_repayment_share - step,
+                            0,
+                        )
+                    elif allocation_click.get("direction") == "repay":
+                        st.session_state.surplus_repayment_share = min(
+                            st.session_state.surplus_repayment_share + step,
+                            100,
+                        )
 
-with metrics_area:
-    col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("Mortgage amount", f"€{mortgage_amount:,.0f}")
-    col2.metric("Upfront cash needed", f"€{upfront_cash_needed:,.0f}")
-    col3.metric("Monthly payment", f"€{monthly_payment:,.0f}")
-    col4.metric("Net rental income", f"€{net_rent:,.0f}")
-    col5.metric("Monthly cashflow", f"€{cashflow_after_costs:,.0f}")
-
-st.subheader("Interest Rate Sensitivity")
-rate_scenarios = build_rate_scenarios(
-    mortgage_amount=mortgage_amount,
-    years=years,
-    rates=[round(rate / 10, 1) for rate in range(20, 61, 5)],
-    net_rent=net_rent,
-)
-
-rate_fig = px.line(
-    rate_scenarios,
-    x="annual_rate",
-    y=["monthly_payment", "net_rent"],
-    markers=True,
-    labels={
-        "annual_rate": "Annual rate (%)",
-        "value": "Monthly amount",
-        "variable": "Metric",
-    },
-)
-rate_fig.update_layout(yaxis_tickprefix="€")
-st.plotly_chart(rate_fig, use_container_width=True)
-
-st.subheader("Combined Repayment Scenario")
-combined_controls_col, combined_chart_col = st.columns([0.36, 0.64])
-
-with combined_controls_col:
-    st.caption(
-        "Rent first covers the normal mortgage payment. This scenario redirects a percentage of the remaining rent surplus as extra principal."
-    )
-    surplus_redirect_share = st.slider(
-        "Rent surplus redirected to mortgage",
-        min_value=0,
-        max_value=100,
-        value=100,
-        step=5,
-    )
-    default_events = pd.DataFrame(
-        [
-            {"after_years": 5, "amount": 10_000},
-        ]
-    )
-    repayment_events_df = st.data_editor(
-        default_events,
-        num_rows="dynamic",
-        hide_index=True,
-        use_container_width=True,
-        column_config={
-            "after_years": st.column_config.NumberColumn(
-                "After years",
-                min_value=1,
-                step=1,
-                help="Year when the extra payment happens.",
-            ),
-            "amount": st.column_config.NumberColumn(
-                "Amount (€)",
-                min_value=0,
-                step=1_000,
-                format="€%.0f",
-                help="Extra repayment amount.",
-            ),
-        },
-        key="combined_repayment_events",
-    )
+        repayment_share = int(st.session_state.surplus_repayment_share)
+        investment_share = 100 - repayment_share
+        allocation_left_col.metric("Surplus used for early repayment", f"{repayment_share}%")
+        allocation_right_col.metric("Surplus invested", f"{investment_share}%")
+        alternative_return = allocation_right_col.number_input(
+            "Alternative annual return",
+            min_value=0.0,
+            max_value=12.0,
+            value=4.0,
+            step=0.25,
+            format="%.2f",
+        )
+        default_events = pd.DataFrame(
+            [
+                {"after_years": 5, "amount": 10_000},
+            ]
+        )
+        st.markdown("**One-off repayment events**")
+        st.caption("Extra payments applied directly to the mortgage after the selected number of years.")
+        repayment_events_df = st.data_editor(
+            default_events,
+            num_rows="dynamic",
+            hide_index=True,
+            use_container_width=True,
+            column_config={
+                "after_years": st.column_config.NumberColumn(
+                    "After years",
+                    min_value=1,
+                    step=1,
+                    help="Year when the extra payment happens.",
+                ),
+                "amount": st.column_config.NumberColumn(
+                    "Amount (€)",
+                    min_value=0,
+                    step=1_000,
+                    format="€%.0f",
+                    help="Extra repayment amount.",
+                ),
+            },
+            key="combined_repayment_events",
+        )
 
 repayment_events = []
 for row in repayment_events_df.itertuples(index=False):
@@ -289,12 +321,10 @@ for row in repayment_events_df.itertuples(index=False):
         )
 
 base_schedule = build_standard_schedule(mortgage_amount, annual_rate, years, monthly_payment)
-room_rent_gross = gross_rent
-room_rent_tax = room_rent_gross * rental_tax_rate / 100
-room_rent_after_tax = room_rent_gross - room_rent_tax
-rent_surplus_after_payment = max(room_rent_after_tax - monthly_payment, 0)
-rent_deficit_after_payment = max(monthly_payment - room_rent_after_tax, 0)
-rent_surplus_to_mortgage = rent_surplus_after_payment * surplus_redirect_share / 100
+monthly_expendable_cashflow = max(cashflow_after_costs, 0)
+monthly_cashflow_deficit = max(-cashflow_after_costs, 0)
+rent_surplus_to_mortgage = monthly_expendable_cashflow * repayment_share / 100
+rent_surplus_to_invest = monthly_expendable_cashflow * investment_share / 100
 
 combined_result = simulate_combined_repayment(
     principal=mortgage_amount,
@@ -307,50 +337,161 @@ combined_result = simulate_combined_repayment(
 combined_months = combined_result["months"]
 base_months = len(base_schedule)
 duration_saved_months = max(base_months - combined_months, 0)
-
-combined_col1, combined_col2, combined_col3, combined_col4 = (
-    combined_chart_col.columns(4)
+investment_horizon_months = combined_months
+invested_surplus_future_value = future_value_monthly_for_months(
+    rent_surplus_to_invest,
+    alternative_return,
+    investment_horizon_months,
 )
-combined_col1.metric("Rent after payment", f"€{rent_surplus_after_payment:,.0f}")
-combined_col2.metric("Extra principal", f"€{rent_surplus_to_mortgage:,.0f}")
-combined_col3.metric("Interest saved", f"€{combined_result['interest_saved']:,.0f}")
-combined_col4.metric("Duration saved", f"{duration_saved_months} months")
+early_repayment_benefit = combined_result["interest_saved"]
+investment_vs_repayment_delta = invested_surplus_future_value - early_repayment_benefit
 
-if rent_deficit_after_payment > 0:
-    combined_chart_col.warning(
-        f"Net rent is €{rent_deficit_after_payment:,.0f} below the monthly mortgage payment, so no recurring rent surplus is redirected."
+with combined_chart_col:
+    combined_col1, combined_col2, combined_col3, combined_col4, combined_col5 = st.columns(5)
+    combined_col1.metric("Monthly cashflow", money(monthly_expendable_cashflow))
+    combined_col2.metric("Extra principal", money(rent_surplus_to_mortgage))
+    combined_col3.metric("Invested monthly", money(rent_surplus_to_invest))
+    combined_col4.metric("Interest saved", money(combined_result["interest_saved"]))
+    combined_col5.metric("Invested value", money(invested_surplus_future_value))
+    st.caption(
+        f"Investment horizon follows the reduced mortgage duration: {investment_horizon_months} months."
     )
 
-combined_projection = pd.DataFrame(combined_result["schedule"])
-combined_projection["scenario"] = "Combined strategy"
-base_projection = pd.DataFrame(base_schedule)
-base_projection["scenario"] = "Base mortgage"
-combined_balance_projection = pd.concat(
-    [base_projection, combined_projection],
-    ignore_index=True,
-)
-combined_balance_projection["year"] = combined_balance_projection["month"] / 12
+    if monthly_cashflow_deficit > 0:
+        st.warning(
+            f"Monthly cashflow is {money(monthly_cashflow_deficit)} below zero after mortgage payment and operating costs, so no recurring surplus is allocated."
+        )
 
-combined_balance_fig = px.line(
-    combined_balance_projection,
-    x="year",
-    y="balance",
-    color="scenario",
-    labels={
-        "year": "Year",
-        "balance": "Remaining debt",
-        "scenario": "Scenario",
-    },
-)
-for event in repayment_events:
-    combined_balance_fig.add_vline(
-        x=event["after_years"],
-        line_dash="dot",
-        line_color="#6b7280",
+    combined_projection = pd.DataFrame(combined_result["schedule"])
+    combined_projection["scenario"] = "Combined strategy"
+    base_projection = pd.DataFrame(base_schedule)
+    base_projection["scenario"] = "Base mortgage"
+    combined_balance_projection = pd.concat(
+        [base_projection, combined_projection],
+        ignore_index=True,
     )
-combined_balance_fig.update_layout(yaxis_tickprefix="€")
-combined_chart_col.plotly_chart(combined_balance_fig, use_container_width=True)
+    combined_balance_projection["year"] = combined_balance_projection["month"] / 12
 
-combined_chart_col.caption(
-    "The curve assumes the normal mortgage payment is always made. Only the selected share of rent left after that payment is applied as recurring extra principal."
-)
+    combined_balance_fig = px.line(
+        combined_balance_projection,
+        x="year",
+        y="balance",
+        color="scenario",
+        labels={
+            "year": "Year",
+            "balance": "Remaining debt",
+            "scenario": "Scenario",
+        },
+    )
+    for event in repayment_events:
+        combined_balance_fig.add_vline(
+            x=event["after_years"],
+            line_dash="dot",
+            line_color="#6b7280",
+        )
+    combined_balance_fig.update_layout(yaxis_tickprefix="€")
+    st.plotly_chart(combined_balance_fig, use_container_width=True)
+    st.caption(
+        "The mortgage curve assumes the normal payment and operating costs are always covered first. The selected repayment share is applied as recurring extra principal; the remaining cashflow is modeled as a monthly investment."
+    )
+
+    allocation_rows = pd.DataFrame(
+        [
+            (
+                "Early repayment",
+                f"{repayment_share}%",
+                rent_surplus_to_mortgage,
+                early_repayment_benefit,
+            ),
+            (
+                "Investment",
+                f"{investment_share}%",
+                rent_surplus_to_invest,
+                invested_surplus_future_value,
+            ),
+            (
+                "Investment minus repayment benefit",
+                "",
+                0,
+                investment_vs_repayment_delta,
+            ),
+        ],
+        columns=["Use", "Share", "Monthly amount", "Estimated benefit"],
+    )
+    allocation_rows["Monthly amount"] = allocation_rows["Monthly amount"].map(money)
+    allocation_rows["Estimated benefit"] = allocation_rows["Estimated benefit"].map(money)
+    st.dataframe(allocation_rows, hide_index=True, use_container_width=True)
+
+with summary_area:
+    st.subheader("Summary")
+    summary_col1, summary_col2, summary_col3, summary_col4, summary_col5 = st.columns(5)
+    summary_col1.metric("Upfront cash", money(upfront_cash_needed))
+    summary_col2.metric("Mortgage amount", money(mortgage_amount))
+    summary_col3.metric("Monthly payment", money(monthly_payment))
+    summary_col4.metric("Net rent", money(net_rent))
+    summary_col5.metric("Monthly cashflow", money(cashflow_after_costs))
+
+with details_area:
+    st.divider()
+    st.subheader("Detailed Summary")
+
+    purchase_summary = pd.DataFrame(
+        [
+            ("House price", money(house_price)),
+            ("Mortgage percentage", f"{mortgage_percent}%"),
+            ("Mortgage amount", money(mortgage_amount)),
+            ("Down payment", money(down_payment)),
+            ("Annual interest rate", f"{annual_rate:.1f}%"),
+            ("Mortgage duration", f"{years} years"),
+            ("Monthly payment", money(monthly_payment)),
+            ("Base total interest", money(total_interest)),
+        ],
+        columns=["Item", "Value"],
+    )
+
+    initial_costs_summary = initial_costs.copy()
+    initial_costs_summary["Amount"] = initial_costs_summary["Amount"].map(money)
+
+    rental_summary = pd.DataFrame(
+        [
+            ("Rented rooms", f"{rooms}"),
+            ("Room prices total", money(sum(room_prices[:rooms]))),
+            ("Occupancy rate", f"{occupancy_rate}%"),
+            ("Gross rent", money(gross_rent)),
+            ("Rental tax rate", f"{rental_tax_rate}%"),
+            ("Net rent after tax", money(net_rent)),
+            ("Monthly operating costs", money(monthly_costs)),
+            ("Cashflow before costs", money(cashflow_before_costs)),
+            ("Cashflow after costs", money(cashflow_after_costs)),
+        ],
+        columns=["Item", "Value"],
+    )
+
+    repayment_summary = pd.DataFrame(
+        [
+            ("Surplus used for repayment", f"{repayment_share}%"),
+            ("Surplus invested", f"{investment_share}%"),
+            ("Recurring extra principal", money(rent_surplus_to_mortgage)),
+            ("Monthly invested surplus", money(rent_surplus_to_invest)),
+            ("Investment horizon", f"{investment_horizon_months} months"),
+            ("Invested future value", money(invested_surplus_future_value)),
+            ("One-off repayment events", money(sum(event["amount"] for event in repayment_events))),
+            ("Interest saved", money(combined_result["interest_saved"])),
+            ("Duration saved", f"{duration_saved_months} months"),
+            ("Combined payoff duration", f"{combined_months} months"),
+        ],
+        columns=["Item", "Value"],
+    )
+
+    detail_col1, detail_col2 = st.columns(2)
+    with detail_col1:
+        st.markdown("**Purchase**")
+        st.dataframe(purchase_summary, hide_index=True, use_container_width=True)
+        st.markdown("**Initial Costs**")
+        st.dataframe(initial_costs_summary, hide_index=True, use_container_width=True)
+
+    with detail_col2:
+        st.markdown("**Rental**")
+        st.dataframe(rental_summary, hide_index=True, use_container_width=True)
+        st.markdown("**Repayment**")
+        st.dataframe(repayment_summary, hide_index=True, use_container_width=True)
