@@ -75,7 +75,7 @@
       <button
         type="button"
         data-direction="invest"
-        title="Move surplus from repayment to investment. Shift: 15%, Ctrl/Cmd: 30%."
+        title="Move surplus from repayment to investment. Default: 1%, Shift: 5%, Ctrl/Cmd: 25%, Ctrl/Cmd+Shift: 100%."
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M5 12h14" />
@@ -85,7 +85,7 @@
       <button
         type="button"
         data-direction="repay"
-        title="Move surplus from investment to repayment. Shift: 15%, Ctrl/Cmd: 30%."
+        title="Move surplus from investment to repayment. Default: 1%, Shift: 5%, Ctrl/Cmd: 25%, Ctrl/Cmd+Shift: 100%."
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M19 12H5" />
@@ -128,13 +128,16 @@
       };
 
       const getStep = (event) => {
+        if ((event.ctrlKey || event.metaKey) && event.shiftKey) {
+          return 100;
+        }
         if (event.ctrlKey || event.metaKey) {
-          return 30;
+          return 25;
         }
         if (event.shiftKey) {
-          return 15;
+          return 5;
         }
-        return 5;
+        return 1;
       };
 
       document.querySelectorAll("button").forEach((button) => {
