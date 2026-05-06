@@ -123,7 +123,11 @@ def evaluate_allocation_strategy(
 
 
 def money(value: float) -> str:
-    return f"€{value:,.0f}"
+    return f"{value:,.0f}€"
+
+
+def money_delta(value: float) -> str:
+    return f"{value:+,.0f}€"
 
 
 def documentation_formula(view: str, explanation: str, latex: str, code: str) -> None:
@@ -198,7 +202,7 @@ st.title("Mortgage Simulator")
 summary_area = st.container()
 purchase_area = st.container()
 room_area = st.container()
-repayment_area = st.container()
+surplus_allocation_area = st.container()
 details_area = st.container()
 documentation_area = st.container()
 
@@ -342,7 +346,7 @@ with purchase_chart_col:
         hole=0.45,
     )
     upfront_fig.update_traces(textposition="inside", textinfo="percent+label")
-    st.plotly_chart(upfront_fig, use_container_width=True)
+    st.plotly_chart(upfront_fig, width="stretch")
 
 with room_area:
     st.divider()
@@ -409,7 +413,7 @@ with room_area:
             st.session_state.room_prices_data,
             num_rows="dynamic",
             hide_index=True,
-            use_container_width=True,
+            width="stretch",
             column_config={
                 "room": st.column_config.TextColumn(
                     "Room",
@@ -476,9 +480,9 @@ with room_area:
         fig.add_hline(y=0, line_dash="dash", line_color="#111827")
         fig.update_traces(texttemplate="€%{text:.0f}", textposition="outside")
         fig.update_layout(showlegend=False, yaxis_tickprefix="€")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
-with repayment_area:
+with surplus_allocation_area:
     st.divider()
     st.subheader("Surplus Allocation")
     combined_controls_col, combined_chart_col = st.columns([0.36, 0.64])
@@ -542,7 +546,7 @@ with repayment_area:
             default_events,
             num_rows="dynamic",
             hide_index=True,
-            use_container_width=True,
+            width="stretch",
             column_config={
                 "after_years": st.column_config.NumberColumn(
                     "After years",
@@ -592,22 +596,10 @@ current_strategy = evaluate_allocation_strategy(
     repayment_events=repayment_events,
 )
 combined_result = current_strategy["result"]
-full_repayment_strategy = evaluate_allocation_strategy(
-    mortgage_amount=mortgage_amount,
-    annual_rate=annual_rate,
-    years=years,
-    monthly_expendable_cashflow=monthly_expendable_cashflow,
-    net_rent=net_rent,
-    monthly_costs=monthly_costs,
-    repayment_share=100,
-    alternative_return=alternative_return,
-    analysis_horizon_years=analysis_horizon_years,
-    repayment_events=repayment_events,
-)
 
 combined_months = current_strategy["payoff_months"]
 base_months = len(base_schedule)
-duration_saved_months = max(base_months - combined_months, 0)
+duration_saved_months = base_months - combined_months
 analysis_horizon_months = current_strategy["analysis_horizon_months"]
 pre_payoff_investment_months = current_strategy["pre_payoff_months"]
 post_payoff_investment_months = current_strategy["post_payoff_months"]
@@ -615,25 +607,8 @@ post_payoff_monthly_investment = current_strategy["post_payoff_monthly_investmen
 invested_surplus_future_value = current_strategy["pre_payoff_future_value"]
 post_payoff_invested_future_value = current_strategy["post_payoff_future_value"]
 early_repayment_benefit = current_strategy["early_repayment_benefit"]
-current_total_vs_full_repayment = (
-    current_strategy["total_strategy_value"]
-    - full_repayment_strategy["total_strategy_value"]
-)
-
-selected_return_repayment_baseline = evaluate_allocation_strategy(
-    mortgage_amount=mortgage_amount,
-    annual_rate=annual_rate,
-    years=years,
-    monthly_expendable_cashflow=monthly_expendable_cashflow,
-    net_rent=net_rent,
-    monthly_costs=monthly_costs,
-    repayment_share=100,
-    alternative_return=alternative_return,
-    analysis_horizon_years=analysis_horizon_years,
-    repayment_events=repayment_events,
-)
 allocation_scenario_rows = []
-for scenario_share in range(0, 101, 5):
+for scenario_share in range(0, 101, 1):
     scenario = evaluate_allocation_strategy(
         mortgage_amount=mortgage_amount,
         annual_rate=annual_rate,
@@ -646,10 +621,6 @@ for scenario_share in range(0, 101, 5):
         analysis_horizon_years=analysis_horizon_years,
         repayment_events=repayment_events,
     )
-    value_vs_baseline = (
-        scenario["total_strategy_value"]
-        - selected_return_repayment_baseline["total_strategy_value"]
-    )
     allocation_scenario_rows.append(
         {
             "Repayment share": scenario_share,
@@ -658,7 +629,6 @@ for scenario_share in range(0, 101, 5):
             "Portfolio value": scenario["strategy_future_value"],
             "Interest saved": scenario["early_repayment_benefit"],
             "Total split value": scenario["total_strategy_value"],
-            "Total value vs 100% repayment": value_vs_baseline,
         }
     )
 
@@ -667,26 +637,39 @@ best_allocation = allocation_scenario_df.sort_values(
     ["Total split value", "Repayment share"],
     ascending=[False, True],
 ).iloc[0]
+best_strategy = evaluate_allocation_strategy(
+    mortgage_amount=mortgage_amount,
+    annual_rate=annual_rate,
+    years=years,
+    monthly_expendable_cashflow=monthly_expendable_cashflow,
+    net_rent=net_rent,
+    monthly_costs=monthly_costs,
+    repayment_share=int(best_allocation["Repayment share"]),
+    alternative_return=alternative_return,
+    analysis_horizon_years=analysis_horizon_years,
+    repayment_events=repayment_events,
+)
+best_total_value = best_strategy["total_strategy_value"]
+allocation_scenario_df["Total value vs best model"] = (
+    allocation_scenario_df["Total split value"] - best_total_value
+)
+current_total_vs_best_model = (
+    current_strategy["total_strategy_value"] - best_total_value
+)
+current_interest_saved_vs_best = (
+    early_repayment_benefit - best_strategy["early_repayment_benefit"]
+)
+current_portfolio_vs_best = (
+    current_strategy["strategy_future_value"] - best_strategy["strategy_future_value"]
+)
+current_payoff_vs_best_months = combined_months - best_strategy["payoff_months"]
+current_payoff_vs_best_years = current_payoff_vs_best_months / 12
 
-scenario_shares = [0, 25, 50, 75, 100]
-scenario_returns = sorted({-4.0, -2.0, 0.0, 2.0, 4.0, 6.0, 8.0, float(alternative_return)})
-repayment_baselines = {
-    scenario_return: evaluate_allocation_strategy(
-        mortgage_amount=mortgage_amount,
-        annual_rate=annual_rate,
-        years=years,
-        monthly_expendable_cashflow=monthly_expendable_cashflow,
-        net_rent=net_rent,
-        monthly_costs=monthly_costs,
-        repayment_share=100,
-        alternative_return=scenario_return,
-        analysis_horizon_years=analysis_horizon_years,
-        repayment_events=repayment_events,
-    )
-    for scenario_return in scenario_returns
-}
+scenario_shares = list(range(0, 101, 10))
+scenario_returns = [float(value) for value in range(-12, 13)]
 scenario_rows = []
 for scenario_return in scenario_returns:
+    return_scenarios = []
     for scenario_share in scenario_shares:
         scenario = evaluate_allocation_strategy(
             mortgage_amount=mortgage_amount,
@@ -700,11 +683,7 @@ for scenario_return in scenario_returns:
             analysis_horizon_years=analysis_horizon_years,
             repayment_events=repayment_events,
         )
-        value_vs_full_repayment = (
-            scenario["total_strategy_value"]
-            - repayment_baselines[scenario_return]["total_strategy_value"]
-        )
-        scenario_rows.append(
+        return_scenarios.append(
             {
                 "Repayment share": scenario_share,
                 "Investment share": 100 - scenario_share,
@@ -713,20 +692,23 @@ for scenario_return in scenario_returns:
                 "Investment portfolio value": scenario["strategy_future_value"],
                 "Interest saved": scenario["early_repayment_benefit"],
                 "Total split value": scenario["total_strategy_value"],
-                "Full repayment total value": repayment_baselines[scenario_return][
-                    "total_strategy_value"
-                ],
-                "Total value vs full repayment": value_vs_full_repayment,
-                "Better": "Mixed/invest" if value_vs_full_repayment >= 0 else "Full repay",
             }
         )
+    return_best_total_value = max(
+        scenario_row["Total split value"] for scenario_row in return_scenarios
+    )
+    for scenario_row in return_scenarios:
+        scenario_row["Total value vs best model"] = (
+            scenario_row["Total split value"] - return_best_total_value
+        )
+    scenario_rows.extend(return_scenarios)
 
 scenario_df = pd.DataFrame(scenario_rows)
 scenario_heatmap = scenario_df.pivot(
     index="Alternative return",
     columns="Repayment share",
-    values="Total value vs full repayment",
-)
+    values="Total value vs best model",
+).reindex(index=scenario_returns, columns=scenario_shares)
 scenario_heatmap_limit = max(abs(scenario_heatmap.min().min()), abs(scenario_heatmap.max().max()))
 if scenario_heatmap_limit == 0:
     scenario_heatmap_limit = 1
@@ -739,56 +721,22 @@ scenario_fig = px.imshow(
     labels={
         "x": "Surplus used for repayment (%)",
         "y": "Alternative annual return (%)",
-        "color": "Total value vs 100% repayment (€)",
+        "color": "Total value vs best model (€)",
     },
     aspect="auto",
 )
-scenario_fig.update_layout(coloraxis_colorbar_tickprefix="€", height=320)
+scenario_fig.update_layout(
+    coloraxis_colorbar_tickprefix="€",
+    height=560,
+)
+scenario_fig.update_xaxes(type="category")
+scenario_fig.update_yaxes(
+    tickmode="linear",
+    tick0=-12,
+    dtick=1,
+)
 
 with combined_controls_col:
-    st.markdown("")
-    st.markdown("**Scenario heatmap**")
-    st.plotly_chart(scenario_fig, use_container_width=True)
-    st.caption(
-        "Green cells mean that allocation has a higher total modeled value than 100% repayment. Total value includes investment portfolio value plus mortgage interest saved."
-    )
-
-with combined_chart_col:
-    combined_col1, combined_col2, combined_col3, combined_col4, combined_col5 = st.columns(5)
-    combined_col1.metric("Monthly cashflow", money(monthly_expendable_cashflow))
-    combined_col2.metric("Extra principal", money(rent_surplus_to_mortgage))
-    combined_col3.metric("Invested monthly", money(rent_surplus_to_invest))
-    combined_col4.metric("Interest saved", money(combined_result["interest_saved"]))
-    combined_col5.metric("Total split value", money(current_strategy["total_strategy_value"]))
-    st.caption(
-        f"Analysis horizon: {analysis_horizon_months} months. Before payoff, the invested surplus is modeled monthly; after payoff, the full net rent after operating costs is modeled as invested."
-    )
-
-    if monthly_cashflow_deficit > 0:
-        st.warning(
-            f"Monthly cashflow is {money(monthly_cashflow_deficit)} below zero after mortgage payment and operating costs, so no recurring surplus is allocated."
-        )
-
-    decision_col1, decision_col2, decision_col3, decision_col4 = st.columns(4)
-    decision_col1.metric(
-        "Best modeled split",
-        f"{int(best_allocation['Repayment share'])}% repay",
-        f"{int(best_allocation['Investment share'])}% invest",
-    )
-    decision_col2.metric(
-        "Best split vs 100% repay",
-        money(best_allocation["Total value vs 100% repayment"]),
-    )
-    decision_col3.metric(
-        "Selected split vs 100% repay",
-        money(current_total_vs_full_repayment),
-    )
-    decision_col4.metric(
-        "Selected payoff",
-        f"{combined_months / 12:.1f} years",
-        f"{duration_saved_months} months saved",
-    )
-
     combined_projection = pd.DataFrame(combined_result["schedule"])
     combined_projection["scenario"] = "Combined strategy"
     base_projection = pd.DataFrame(base_schedule)
@@ -816,87 +764,128 @@ with combined_chart_col:
             line_dash="dot",
             line_color="#6b7280",
         )
+    st.markdown("**Remaining debt projection**")
+    st.caption(
+        "The remaining-debt projection includes only the recurring extra principal from the selected split and any one-off repayment events."
+    )
     combined_balance_fig.update_layout(yaxis_tickprefix="€")
-    st.plotly_chart(combined_balance_fig, use_container_width=True)
+    st.plotly_chart(combined_balance_fig, width="stretch")
+
+with combined_chart_col:
+    combined_col1, = st.columns(1)
+    combined_col1.metric("Monthly cashflow", money(monthly_expendable_cashflow))
     st.caption(
-        "The mortgage curve assumes the normal payment and operating costs are always covered first. The selected repayment share is applied as recurring extra principal; the remaining cashflow is modeled as a monthly investment."
+        f"Analysis horizon: {analysis_horizon_months} months. Before payoff, the invested surplus is modeled monthly; after payoff, the full net rent after operating costs is modeled as invested."
     )
 
-    allocation_rows = pd.DataFrame(
-        [
-            (
-                "Selected allocation vs 100% repayment",
-                "",
-                "",
-                money(current_total_vs_full_repayment),
-            ),
-            (
-                "Selected total split value",
-                "",
-                "",
-                money(current_strategy["total_strategy_value"]),
-            ),
-            (
-                "Selected allocation portfolio value",
-                "",
-                "",
-                money(current_strategy["strategy_future_value"]),
-            ),
-            (
-                "100% repayment baseline value",
-                "",
-                "",
-                money(full_repayment_strategy["total_strategy_value"]),
-            ),
-            (
-                "Early repayment interest saved",
-                f"{repayment_share}%",
-                money(rent_surplus_to_mortgage),
-                money(early_repayment_benefit),
-            ),
-            (
-                "Pre-payoff monthly investment",
-                f"{investment_share}%",
-                money(rent_surplus_to_invest),
-                money(invested_surplus_future_value),
-            ),
-            (
-                "Post-payoff rent investment",
-                "",
-                money(post_payoff_monthly_investment),
-                money(post_payoff_invested_future_value),
-            ),
-            (
-                "One-off repayments applied",
-                "",
-                money(sum(event["amount"] for event in repayment_events)),
-                money(combined_result["event_total"]),
-            ),
-        ],
-        columns=["Decision item", "Share", "Monthly amount", "Value / effect"],
+    if monthly_cashflow_deficit > 0:
+        st.warning(
+            f"Monthly cashflow is {money(monthly_cashflow_deficit)} below zero after mortgage payment and operating costs, so no recurring surplus is allocated."
+        )
+    st.markdown("---")
+    st.markdown("#### **Best split**")
+    best_row1_col1, best_row1_col2, best_row1_col3, best_row1_col4 = st.columns(4)
+    best_row1_col1.metric(
+        "Split proportion [repay | invest]",
+        f"{int(best_allocation['Repayment share'])}% | {int(best_allocation['Investment share'])}%",
     )
-    st.dataframe(allocation_rows, hide_index=True, use_container_width=True)
+    best_row1_col2.metric(
+        "Extra principal",
+        money(monthly_expendable_cashflow * best_allocation["Repayment share"] / 100),
+    )
+    best_row1_col3.metric(
+        "Invested monthly",
+        money(monthly_expendable_cashflow * best_allocation["Investment share"] / 100),
+    )
 
-    st.markdown("**Scenario comparison**")
+
+    best_row2_col1, best_row2_col2, best_row2_col3, best_row2_col4 = st.columns(4)
+
+    best_row2_col1.metric(
+        "Payoff",
+        f"{best_strategy['payoff_months'] / 12:.1f} years",
+    )
+    best_row2_col2.metric(
+        "Interest saved",
+        money(best_strategy["early_repayment_benefit"]),
+    )
+    best_row2_col3.metric(
+        "Portfolio",
+        money(best_strategy["strategy_future_value"]),
+    )
+    best_row2_col4.metric(
+        "Total value",
+        money(best_strategy["total_strategy_value"]),
+    )
+    st.markdown("---")
+    st.markdown("#### **Selected split**")
+    selected_row1_col1, selected_row1_col2, selected_row1_col3,selected_row1_col4 = st.columns(4)
+    selected_row1_col1.metric(
+        f"Split proportion [repay | invest]",
+        f"{repayment_share}% | {investment_share}%",
+    )
+    selected_row1_col2.metric(
+        "Extra principal",
+        money(rent_surplus_to_mortgage),
+    )
+    selected_row1_col3.metric(
+        "Invested monthly",
+        money(rent_surplus_to_invest),
+    )
+
+    selected_row2_col1, selected_row2_col2, selected_row2_col3, selected_row2_col4 = st.columns(4)
+    selected_row2_col1.metric(
+        "Payoff",
+        f"{combined_months / 12:.1f} years",
+        f"{current_payoff_vs_best_years:+.1f} years",
+        delta_color="inverse",
+    )
+    selected_row2_col2.metric(
+        "Interest saved",
+        money(early_repayment_benefit),
+        money_delta(current_interest_saved_vs_best),
+    )
+    selected_row2_col3.metric(
+        "Portfolio",
+        money(current_strategy["strategy_future_value"]),
+        money_delta(current_portfolio_vs_best),
+    )
+    selected_row2_col4.metric(
+        "Total value",
+        money(current_strategy["total_strategy_value"]),
+        money_delta(current_total_vs_best_model),
+    )
+    st.markdown("---")
+
+with surplus_allocation_area:
+    st.markdown("#### **Scenario comparison**")
+    st.markdown("**Scenario value curve**")
     st.caption(
-        "This chart varies only the allocation slider from 0% to 100% repayment while keeping the selected annual return, rents, costs, one-off events, and analysis horizon fixed. Positive values favor the allocation; negative values favor 100% repayment."
+        f"This chart varies only the allocation slider from 0% to 100% repayment while keeping the selected annual return, rents, costs, one-off events, and analysis horizon fixed. Zero marks the best split at the selected return ({alternative_return:.2f}%); all other values show the selected split's total-value gap versus that best split. Total value includes the investment portfolio plus mortgage interest saved."
     )
     comparison_line_fig = px.line(
         allocation_scenario_df,
         x="Repayment share",
-        y="Total value vs 100% repayment",
+        y="Total value vs best model",
         markers=True,
         labels={
             "Repayment share": "Surplus used for repayment (%)",
-            "Total value vs 100% repayment": "Total value vs 100% repayment",
+            "Total value vs best model": "Total value gap vs best split (€)",
         },
     )
     comparison_line_fig.update_layout(yaxis_tickprefix="€")
     comparison_line_fig.add_hline(y=0, line_dash="dot", line_color="#6b7280")
-    st.plotly_chart(comparison_line_fig, use_container_width=True)
+    st.plotly_chart(comparison_line_fig, width="stretch")
+
+    st.markdown("**Scenario heatmap**")
     st.caption(
-        f"Uses the selected return ({alternative_return:.2f}%). Total value includes the investment portfolio plus mortgage interest saved."
+        "Each return row compares every repayment split against that row's best split. The heatmap now spans the full modeled return range from -12% to 12%. Zero marks the best split for that return. Total value includes investment portfolio value plus mortgage interest saved."
     )
+    st.plotly_chart(scenario_fig, width="stretch")
+
+
+
+
 
 with summary_area:
     st.subheader("Summary")
@@ -955,15 +944,15 @@ with details_area:
             ("Pre-payoff surplus future value", money(invested_surplus_future_value)),
             ("Post-payoff invested value", money(post_payoff_invested_future_value)),
             ("One-off repayment events", money(sum(event["amount"] for event in repayment_events))),
-            ("Current allocation portfolio value", money(current_strategy["strategy_future_value"])),
-            ("Current allocation total split value", money(current_strategy["total_strategy_value"])),
-            ("100% repayment baseline value", money(full_repayment_strategy["total_strategy_value"])),
-            ("Current total value vs 100% repayment", money(current_total_vs_full_repayment)),
+            ("Selected split portfolio value", money(current_strategy["strategy_future_value"])),
+            ("Selected split total value", money(current_strategy["total_strategy_value"])),
+            ("Selected split vs best split", money(current_total_vs_best_model)),
+            ("Selected split payoff vs best split", f"{current_payoff_vs_best_years:+.1f} years"),
             ("Best modeled repayment share", f"{int(best_allocation['Repayment share'])}%"),
             ("Best modeled investment share", f"{int(best_allocation['Investment share'])}%"),
-            ("Best modeled total value vs 100% repayment", money(best_allocation["Total value vs 100% repayment"])),
+            ("Best modeled total value", money(best_total_value)),
             ("Interest saved", money(combined_result["interest_saved"])),
-            ("Duration saved", f"{duration_saved_months} months"),
+            ("Base duration saved", f"{duration_saved_months} months"),
             ("Combined payoff duration", f"{combined_months} months"),
         ],
         columns=["Item", "Value"],
@@ -972,15 +961,15 @@ with details_area:
     detail_col1, detail_col2 = st.columns(2)
     with detail_col1:
         st.markdown("**Purchase**")
-        st.dataframe(purchase_summary, hide_index=True, use_container_width=True)
+        st.dataframe(purchase_summary, hide_index=True, width="stretch")
         st.markdown("**Initial Costs**")
-        st.dataframe(initial_costs_summary, hide_index=True, use_container_width=True)
+        st.dataframe(initial_costs_summary, hide_index=True, width="stretch")
 
     with detail_col2:
         st.markdown("**Rental**")
-        st.dataframe(rental_summary, hide_index=True, use_container_width=True)
-        st.markdown("**Repayment**")
-        st.dataframe(repayment_summary, hide_index=True, use_container_width=True)
+        st.dataframe(rental_summary, hide_index=True, width="stretch")
+        st.markdown("**Surpluss allocation**")
+        st.dataframe(repayment_summary, hide_index=True, width="stretch")
 
 with documentation_area:
     st.divider()
@@ -1170,9 +1159,9 @@ pre_payoff_future_value = pre_payoff_value_at_payoff * (1 + annual_return / 100)
         )
         documentation_formula(
             formula_view,
-            "**Scenario comparison.** Allocation scenarios are compared against the 100% repayment baseline using total split value at the same analysis horizon.",
-            r"\Delta = V_\text{split} - V_\text{100\% repayment}",
-            "value_vs_full_repayment = total_strategy_value - full_repayment_total_strategy_value",
+            "**Scenario comparison.** Allocation scenarios are compared against the best modeled allocation using total split value at the same analysis horizon.",
+            r"\Delta = V_\text{split} - V_\text{best}",
+            "value_vs_best_model = total_strategy_value - best_total_value",
         )
 
     with st.expander("Assumptions and references", expanded=False):
