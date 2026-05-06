@@ -42,7 +42,9 @@ Contains the core purchase assumptions:
 - mortgage percentage
 - annual interest rate
 - mortgage duration
-- initial purchase costs such as notary, istruttoria, perizia, agency, taxes, renovation, and other upfront costs
+- grouped initial purchase costs for professional fees, bank fees and taxes, property setup, and other upfront costs
+
+Notary and agency costs can be entered either as fixed euro amounts or as percentages of the house price.
 
 The nearby pie chart shows how upfront cash is split across down payment and initial costs.
 
@@ -50,12 +52,13 @@ The nearby pie chart shows how upfront cash is split across down payment and ini
 
 Models the rental side of the property:
 
-- occupancy rate
+- quick rental estimate for gross rent, net rent, and monthly operating costs
+- expected occupancy
 - rental tax rate
 - monthly operating costs
-- a dynamic room-price table
+- a dynamic room-rent table with editable room labels
 
-The room table supports any number of rooms. Add or remove rows to change the room count. The break-even chart shows monthly cashflow by number of rented rooms.
+The room table supports any number of rooms. Add or remove rows to change the room count. Empty room labels are automatically filled as `Room 1`, `Room 2`, and so on. The break-even chart shows monthly cashflow by number of rented rooms.
 
 ### Surplus Allocation
 
@@ -101,5 +104,5 @@ main.py       Streamlit UI and orchestration
 mortgage.py   Mortgage payment, amortization, and repayment simulation helpers
 rental.py     Rental income helpers
 scenarios.py  Room scenario helpers
-components/   Local Streamlit component for modifier-aware allocation buttons
+components/   Local Streamlit components for custom cost inputs and allocation buttons
 ```
