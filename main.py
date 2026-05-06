@@ -19,6 +19,11 @@ allocation_buttons = components.declare_component(
     path=str(Path(__file__).parent / "components" / "allocation_buttons"),
 )
 
+cost_amount_input = components.declare_component(
+    "cost_amount_input",
+    path=str(Path(__file__).parent / "components" / "cost_amount_input"),
+)
+
 
 def coerce_positive_float(value: object) -> float:
     if pd.isna(value):
@@ -51,6 +56,36 @@ def future_value_monthly_for_months(
 
 def money(value: float) -> str:
     return f"€{value:,.0f}"
+
+
+def cost_input(container, label: str, house_price: float, default_amount: int, key: str) -> float:
+    state_key = f"{key}_cost_input"
+    if state_key not in st.session_state:
+        st.session_state[state_key] = {"mode": "amount", "value": float(default_amount)}
+
+    current = st.session_state[state_key]
+    with container:
+        result = cost_amount_input(
+            label=label,
+            house_price=house_price,
+            mode=current["mode"],
+            value=current["value"],
+            tooltip=f"Enter {label.lower()} as a fixed euro amount or click the button to use a percentage of the house price.",
+            key=key,
+            default=current,
+        )
+
+    if isinstance(result, dict):
+        st.session_state[state_key] = {
+            "mode": result.get("mode", current["mode"]),
+            "value": float(result.get("value", current["value"]) or 0),
+        }
+        return float(result.get("amount", 0))
+
+    if current["mode"] == "percent":
+        return house_price * current["value"] / 100
+
+    return current["value"]
 
 
 st.set_page_config(
@@ -88,7 +123,7 @@ with purchase_area:
 
         st.subheader("Initial Costs")
         cost_col1, cost_col2, cost_col3 = st.columns(3)
-        notary_cost = cost_col1.number_input("Notary", min_value=0, value=3_000, step=250)
+        notary_cost = cost_input(cost_col1, "Notary", house_price, 3_000, "notary")
         istruttoria_cost = cost_col2.number_input(
             "Istruttoria",
             min_value=0,
@@ -96,7 +131,7 @@ with purchase_area:
             step=100,
         )
         appraisal_cost = cost_col3.number_input("Perizia", min_value=0, value=300, step=50)
-        agency_cost = cost_col1.number_input("Agency", min_value=0, value=0, step=250)
+        agency_cost = cost_input(cost_col1, "Agency", house_price, 0, "agency")
         purchase_taxes = cost_col2.number_input(
             "Purchase taxes",
             min_value=0,

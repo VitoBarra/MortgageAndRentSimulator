@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --primary-color: rgb(255, 75, 75);
+        --background-color: rgb(255, 255, 255);
+        --secondary-background-color: rgb(240, 242, 246);
+        --text-color: rgb(49, 51, 63);
+        --border-color: rgba(49, 51, 63, 0.2);
+        --divider-color: rgba(49, 51, 63, 0.12);
+        --button-hover-background-color: color-mix(in srgb, var(--primary-color) 100%, transparent);
+        --button-hover-text-color: rgb(255, 255, 255);
+        --muted-text-color: rgba(49, 51, 63, 0.65);
+        --disabled-text-color: color-mix(in srgb, var(--text-color) 55%, transparent);
+        font-family: "Source Sans Pro", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+      }
+
+      .field {
+        padding: 0;
+      }
+
+      label {
+        align-items: center;
+        color: var(--text-color);
+        display: flex;
+        font-size: 0.875rem;
+        font-weight: 400;
+        gap: 0.35rem;
+        line-height: 1.25;
+        margin: 0 0 0.35rem;
+      }
+
+      .help {
+        align-items: center;
+        border: 1px solid var(--border-color);
+        border-radius: 999px;
+        color: var(--muted-text-color);
+        cursor: help;
+        display: inline-flex;
+        font-size: 0.7rem;
+        font-weight: 700;
+        height: 1rem;
+        justify-content: center;
+        line-height: 1;
+        width: 1rem;
+      }
+
+      .control {
+        align-items: stretch;
+        background: var(--secondary-background-color);
+        border: 1px solid transparent;
+        border-radius: 0.5rem;
+        display: flex;
+        height: 2.5rem;
+        overflow: hidden;
+        width: 100%;
+      }
+
+      input {
+        appearance: textfield;
+        background: var(--secondary-background-color);
+        border: 0;
+        border-radius: 0;
+        color: var(--text-color);
+        flex: 1 1 auto;
+        font: inherit;
+        font-size: 1rem;
+        height: 100%;
+        min-width: 0;
+        padding: 0.5rem 0.75rem;
+      }
+
+      input::-webkit-inner-spin-button,
+      input::-webkit-outer-spin-button {
+        appearance: none;
+        margin: 0;
+      }
+
+      button {
+        background: var(--secondary-background-color);
+        border: 0;
+        color: var(--text-color);
+        cursor: pointer;
+        font: inherit;
+        font-size: 0.95rem;
+        font-weight: 600;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+
+      .step {
+        border-radius: 0;
+        flex: 0 0 2.25rem;
+        font-size: 1.1rem;
+      }
+
+      .mode {
+        border-radius: 0;
+        flex: 0 0 3rem;
+      }
+
+      input:focus {
+        outline: none;
+      }
+
+      .control:focus-within {
+        border-color: transparent;
+      }
+
+      button:hover {
+        background: var(--button-hover-background-color);
+        color: var(--button-hover-text-color);
+      }
+
+      button:disabled {
+        color: var(--disabled-text-color);
+        cursor: not-allowed;
+        opacity: 1;
+      }
+
+      button:disabled:hover {
+        background: var(--secondary-background-color);
+      }
+
+      .caption {
+        color: var(--muted-text-color);
+        font-size: 0.8rem;
+        line-height: 1.2;
+        margin-top: 0.3rem;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --background-color: rgb(14, 17, 23);
+          --secondary-background-color: rgb(38, 39, 48);
+          --text-color: rgb(250, 250, 250);
+          --border-color: rgba(250, 250, 250, 0.2);
+          --divider-color: rgba(250, 250, 250, 0.12);
+          --button-hover-background-color: color-mix(in srgb, var(--primary-color) 30%, transparent);
+          --muted-text-color: rgba(250, 250, 250, 0.65);
+          --disabled-text-color: color-mix(in srgb, var(--text-color) 55%, transparent);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="field">
+      <label>
+        <span id="label"></span>
+        <span id="help" class="help">?</span>
+      </label>
+      <div class="control">
+        <input id="value" type="number" min="0" step="0.1" />
+        <button id="decrement" class="step" type="button" title="Decrease value">−</button>
+        <button id="increment" class="step" type="button" title="Increase value">+</button>
+        <button id="mode" class="mode" type="button"></button>
+      </div>
+      <div id="caption" class="caption"></div>
+    </div>
+
+    <script>
+      const label = document.getElementById("label");
+      const help = document.getElementById("help");
+      const valueInput = document.getElementById("value");
+      const decrementButton = document.getElementById("decrement");
+      const incrementButton = document.getElementById("increment");
+      const modeButton = document.getElementById("mode");
+      const caption = document.getElementById("caption");
+
+      let args = {};
+      let mode = "amount";
+      let value = 0;
+
+      const streamlitMessage = (type, data = {}) => {
+        window.parent.postMessage(
+          {
+            isStreamlitMessage: true,
+            type,
+            ...data,
+          },
+          "*",
+        );
+      };
+
+      const setHeight = () => {
+        streamlitMessage("streamlit:setFrameHeight", {
+          height: document.documentElement.scrollHeight,
+        });
+      };
+
+      const setTheme = (theme = {}) => {
+        const root = document.documentElement;
+        if (theme.primaryColor) root.style.setProperty("--primary-color", theme.primaryColor);
+        if (theme.backgroundColor) root.style.setProperty("--background-color", theme.backgroundColor);
+        if (theme.secondaryBackgroundColor) {
+          root.style.setProperty("--secondary-background-color", theme.secondaryBackgroundColor);
+        }
+        if (theme.borderColor) root.style.setProperty("--border-color", theme.borderColor);
+        if (theme.borderColor) root.style.setProperty("--divider-color", theme.borderColor);
+        if (theme.textColor) {
+          root.style.setProperty("--text-color", theme.textColor);
+          root.style.setProperty("--muted-text-color", theme.textColor);
+        }
+        if (theme.font) root.style.fontFamily = theme.font;
+      };
+
+      const formatMoney = (amount) =>
+        new Intl.NumberFormat("en-US", {
+          style: "currency",
+          currency: "EUR",
+          maximumFractionDigits: 0,
+        }).format(amount);
+
+      const getAmount = () => {
+        const housePrice = Number(args.house_price || 0);
+        return mode === "percent" ? (housePrice * value) / 100 : value;
+      };
+
+      const getStep = () => (mode === "percent" ? 0.1 : 250);
+
+      const decimalsForMode = () => (mode === "percent" ? 1 : 0);
+
+      const setValue = (nextValue) => {
+        const decimals = decimalsForMode();
+        value = Math.max(Number(Number(nextValue).toFixed(decimals)), 0);
+        valueInput.value = String(value);
+      };
+
+      const render = () => {
+        label.textContent = args.label || "";
+        const tooltip =
+          args.tooltip ||
+          "Enter a fixed euro amount, or click the attached button to switch to percent of house price.";
+        help.title = tooltip;
+        valueInput.title = tooltip;
+        const displayValue = mode === "percent" ? Number(value.toFixed(1)) : Math.round(value);
+        valueInput.value = Number.isFinite(displayValue) ? String(displayValue) : "0";
+        valueInput.step = mode === "percent" ? "0.1" : "250";
+        modeButton.textContent = mode === "percent" ? "%" : "€";
+        modeButton.title =
+          mode === "percent"
+            ? "Using percent of house price. Click to switch to fixed euro amount."
+            : "Using fixed euro amount. Click to switch to percent of house price.";
+        decrementButton.disabled = Number(valueInput.value || 0) <= 0;
+        caption.textContent =
+          mode === "percent" ? `${args.label || "Cost"}: ${formatMoney(getAmount())}` : "";
+        setHeight();
+      };
+
+      const sendValue = () => {
+        setValue(valueInput.value || 0);
+        streamlitMessage("streamlit:setComponentValue", {
+          dataType: "json",
+          value: {
+            mode,
+            value,
+            amount: getAmount(),
+          },
+        });
+        render();
+      };
+
+      decrementButton.addEventListener("click", () => {
+        setValue(Number(valueInput.value || 0) - getStep());
+        sendValue();
+      });
+
+      incrementButton.addEventListener("click", () => {
+        setValue(Number(valueInput.value || 0) + getStep());
+        sendValue();
+      });
+
+      modeButton.addEventListener("click", () => {
+        const amount = getAmount();
+        mode = mode === "percent" ? "amount" : "percent";
+        setValue(
+          mode === "percent" && Number(args.house_price || 0) > 0
+            ? (amount / Number(args.house_price)) * 100
+            : amount,
+        );
+        sendValue();
+      });
+
+      valueInput.addEventListener("change", sendValue);
+      valueInput.addEventListener("blur", sendValue);
+
+      window.addEventListener("message", (event) => {
+        if (event.data.type !== "streamlit:render") {
+          return;
+        }
+
+        args = event.data.args || {};
+        setTheme(event.data.theme);
+        mode = args.mode || "amount";
+        value = Number(args.value || 0);
+        render();
+      });
+
+      streamlitMessage("streamlit:componentReady", { apiVersion: 1 });
+      setHeight();
+    </script>
+  </body>
+</html>

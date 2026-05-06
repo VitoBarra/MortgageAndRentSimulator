@@ -5,7 +5,16 @@
     <style>
       :root {
         color-scheme: light dark;
+        --primary-color: rgb(255, 75, 75);
+        --background-color: rgb(255, 255, 255);
+        --secondary-background-color: rgb(240, 242, 246);
+        --text-color: rgb(49, 51, 63);
+        --border-color: rgba(49, 51, 63, 0.2);
         font-family: "Source Sans Pro", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
       }
 
       body {
@@ -16,35 +25,44 @@
         display: flex;
         flex-direction: column;
         gap: 0.35rem;
-        padding-top: 0.25rem;
       }
 
       button {
-        border: 1px solid rgba(49, 51, 63, 0.2);
+        background: var(--secondary-background-color);
+        border: 1px solid var(--border-color);
         border-radius: 0.5rem;
-        background: rgb(255, 255, 255);
-        color: rgb(49, 51, 63);
+        color: var(--text-color);
         cursor: pointer;
+        font: inherit;
         font-size: 1.1rem;
+        height: 2.5rem;
         line-height: 1;
-        min-height: 2.35rem;
+        margin: 0;
+        padding: 0;
         width: 100%;
       }
 
+      button:focus {
+        border-color: var(--primary-color);
+        box-shadow: inset 0 0 0 1px var(--primary-color);
+        outline: none;
+      }
+
       button:hover {
-        border-color: rgb(255, 75, 75);
-        color: rgb(255, 75, 75);
+        border-color: var(--primary-color);
+        color: var(--primary-color);
       }
 
       button:active {
-        background: rgba(255, 75, 75, 0.08);
+        color: var(--primary-color);
       }
 
       @media (prefers-color-scheme: dark) {
-        button {
-          background: rgb(38, 39, 48);
-          color: rgb(250, 250, 250);
-          border-color: rgba(250, 250, 250, 0.2);
+        :root {
+          --background-color: rgb(14, 17, 23);
+          --secondary-background-color: rgb(38, 39, 48);
+          --text-color: rgb(250, 250, 250);
+          --border-color: rgba(250, 250, 250, 0.2);
         }
       }
     </style>
@@ -85,6 +103,18 @@
         });
       };
 
+      const setTheme = (theme = {}) => {
+        const root = document.documentElement;
+        if (theme.primaryColor) root.style.setProperty("--primary-color", theme.primaryColor);
+        if (theme.backgroundColor) root.style.setProperty("--background-color", theme.backgroundColor);
+        if (theme.secondaryBackgroundColor) {
+          root.style.setProperty("--secondary-background-color", theme.secondaryBackgroundColor);
+        }
+        if (theme.borderColor) root.style.setProperty("--border-color", theme.borderColor);
+        if (theme.textColor) root.style.setProperty("--text-color", theme.textColor);
+        if (theme.font) root.style.fontFamily = theme.font;
+      };
+
       const getStep = (event) => {
         if (event.ctrlKey || event.metaKey) {
           return 30;
@@ -110,6 +140,7 @@
 
       window.addEventListener("message", (event) => {
         if (event.data.type === "streamlit:render") {
+          setTheme(event.data.theme);
           setHeight();
         }
       });
