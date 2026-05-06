@@ -58,7 +58,30 @@ def money(value: float) -> str:
     return f"€{value:,.0f}"
 
 
-def cost_input(container, label: str, house_price: float, default_amount: int, key: str) -> float:
+def normalize_room_prices(room_prices_df: pd.DataFrame) -> pd.DataFrame:
+    normalized = room_prices_df.copy()
+    if "room" not in normalized:
+        normalized.insert(0, "room", None)
+    if "monthly_rent" not in normalized:
+        normalized["monthly_rent"] = 0
+
+    normalized = normalized[["room", "monthly_rent"]]
+    for position, index in enumerate(normalized.index, start=1):
+        room_label = normalized.at[index, "room"]
+        if pd.isna(room_label) or str(room_label).strip() == "":
+            normalized.at[index, "room"] = f"Room {position}"
+
+    return normalized
+
+
+def cost_input(
+    container,
+    label: str,
+    house_price: float,
+    default_amount: int,
+    key: str,
+    tooltip: str,
+) -> float:
     state_key = f"{key}_cost_input"
     if state_key not in st.session_state:
         st.session_state[state_key] = {"mode": "amount", "value": float(default_amount)}
@@ -70,7 +93,7 @@ def cost_input(container, label: str, house_price: float, default_amount: int, k
             house_price=house_price,
             mode=current["mode"],
             value=current["value"],
-            tooltip=f"Enter {label.lower()} as a fixed euro amount or click the button to use a percentage of the house price.",
+            tooltip=tooltip,
             key=key,
             default=current,
         )
@@ -116,39 +139,92 @@ with purchase_area:
             value=140_000,
             step=5_000,
             format="%d",
+            help="Total purchase price of the property before mortgage financing and upfront costs.",
         )
-        mortgage_percent = purchase_col2.slider("Mortgage percentage", 50, 100, 100, 5)
-        annual_rate = purchase_col1.slider("Annual interest rate", 1.0, 8.0, 3.5, 0.1)
-        years = purchase_col2.slider("Mortgage duration", 10, 35, 30, 1)
+        mortgage_percent = purchase_col2.slider(
+            "Mortgage percentage",
+            50,
+            100,
+            100,
+            5,
+            help="Share of the house price financed by the mortgage. The remainder is the down payment.",
+        )
+        annual_rate = purchase_col1.slider(
+            "Annual interest rate",
+            1.0,
+            8.0,
+            3.5,
+            0.1,
+            help="Nominal annual mortgage interest rate used to calculate the monthly payment.",
+        )
+        years = purchase_col2.slider(
+            "Mortgage duration",
+            10,
+            35,
+            30,
+            1,
+            help="Mortgage term in years for the base repayment schedule.",
+        )
 
         st.subheader("Initial Costs")
-        cost_col1, cost_col2, cost_col3 = st.columns(3)
-        notary_cost = cost_input(cost_col1, "Notary", house_price, 3_000, "notary")
-        istruttoria_cost = cost_col2.number_input(
+        st.markdown("**Professional fees**")
+        professional_col1, professional_col2 = st.columns(2)
+        notary_cost = cost_input(
+            professional_col1,
+            "Notary",
+            house_price,
+            3_000,
+            "notary",
+            "Notary fees paid at purchase. Use a fixed euro amount or switch to a percentage of the house price.",
+        )
+        agency_cost = cost_input(
+            professional_col2,
+            "Agency",
+            house_price,
+            0,
+            "agency",
+            "Real estate agency commission. Use a fixed euro amount or switch to a percentage of the house price.",
+        )
+
+        st.markdown("**Bank and taxes**")
+        bank_col1, bank_col2, bank_col3 = st.columns(3)
+        istruttoria_cost = bank_col1.number_input(
             "Istruttoria",
             min_value=0,
             value=800,
             step=100,
+            help="Bank application or mortgage setup fee charged during loan approval.",
         )
-        appraisal_cost = cost_col3.number_input("Perizia", min_value=0, value=300, step=50)
-        agency_cost = cost_input(cost_col1, "Agency", house_price, 0, "agency")
-        purchase_taxes = cost_col2.number_input(
+        appraisal_cost = bank_col2.number_input(
+            "Perizia",
+            min_value=0,
+            value=300,
+            step=50,
+            help="Property appraisal fee required by the bank before issuing the mortgage.",
+        )
+        purchase_taxes = bank_col3.number_input(
             "Purchase taxes",
             min_value=0,
             value=1_500,
             step=250,
+            help="Taxes due on the property purchase, excluding professional and bank fees.",
         )
-        renovation_cost = cost_col3.number_input(
+
+        st.markdown("**Property setup**")
+        setup_col1, setup_col2 = st.columns(2)
+        renovation_cost = setup_col1.number_input(
             "Renovation",
             min_value=0,
             value=0,
             step=1_000,
+            help="One-off renovation or furnishing budget needed before renting or moving in.",
         )
-        other_initial_costs = cost_col1.number_input(
+        other_initial_costs = setup_col2.number_input(
             "Other initial costs",
             min_value=0,
             value=0,
             step=100,
+            help="Any additional upfront cash cost not covered by the other categories.",
         )
 
 mortgage_amount = house_price * mortgage_percent / 100
@@ -197,40 +273,90 @@ with room_area:
     room_controls_col, room_chart_col = st.columns([0.42, 0.58])
 
     with room_controls_col:
-        rental_settings_col1, rental_settings_col2 = st.columns(2)
-        occupancy_rate = rental_settings_col1.slider("Occupancy rate", 50, 100, 90, 5)
-        rental_tax_rate = rental_settings_col2.slider("Rental tax rate", 0, 35, 21, 1)
+        rental_estimate_area = st.container()
 
+        st.markdown("**Rental assumptions**")
+        rental_settings_col1, rental_settings_col2 = st.columns(2)
+        occupancy_rate = rental_settings_col1.slider(
+            "Expected occupancy",
+            50,
+            100,
+            90,
+            5,
+            help="Average share of time the rooms are expected to be rented. Lower this if you expect vacancy between tenants.",
+        )
+        rental_tax_rate = rental_settings_col2.slider(
+            "Rental tax rate",
+            0,
+            35,
+            21,
+            1,
+            help="Tax applied to gross rental income. The app subtracts this before calculating rental cashflow.",
+        )
+
+        st.markdown("**Monthly operating costs**")
         cost_col1, cost_col2, cost_col3 = st.columns(3)
-        condo_costs = cost_col1.number_input("Condo costs", min_value=0, value=80, step=10)
-        maintenance = cost_col2.number_input(
-            "Maintenance reserve",
+        condo_costs = cost_col1.number_input(
+            "Condo fees",
             min_value=0,
             value=80,
             step=10,
+            help="Monthly condominium, building management, or shared-property charges.",
         )
-        other_costs = cost_col3.number_input("Other costs", min_value=0, value=0, step=10)
+        maintenance = cost_col2.number_input(
+            "Maintenance",
+            min_value=0,
+            value=80,
+            step=10,
+            help="Monthly reserve for repairs, replacements, and routine property maintenance.",
+        )
+        other_costs = cost_col3.number_input(
+            "Other",
+            min_value=0,
+            value=0,
+            step=10,
+            help="Other recurring monthly costs, such as utilities paid by the owner or insurance.",
+        )
 
-        default_room_prices = pd.DataFrame({"monthly_rent": [400, 425, 450]})
+        st.markdown("**Room rents**")
+        if "room_prices_data" not in st.session_state:
+            st.session_state.room_prices_data = normalize_room_prices(
+                pd.DataFrame(
+                    {
+                        "room": ["Room 1", "Room 2", "Room 3"],
+                        "monthly_rent": [400, 425, 450],
+                    }
+                )
+            )
         room_prices_df = st.data_editor(
-            default_room_prices,
+            st.session_state.room_prices_data,
             num_rows="dynamic",
             hide_index=True,
             use_container_width=True,
             column_config={
+                "room": st.column_config.TextColumn(
+                    "Room",
+                    help="Optional room label used only to keep the rent table readable.",
+                ),
                 "monthly_rent": st.column_config.NumberColumn(
-                    "Monthly rent (€)",
+                    "Monthly rent",
                     min_value=0,
                     step=25,
                     format="€%.0f",
+                    help="Monthly rent charged for this room. Each row counts as one rentable room.",
                 ),
             },
             key="room_prices",
         )
+        normalized_room_prices_df = normalize_room_prices(room_prices_df)
+        has_missing_room_labels = not normalized_room_prices_df["room"].equals(room_prices_df["room"])
+        st.session_state.room_prices_data = normalized_room_prices_df
+        if has_missing_room_labels:
+            st.rerun()
 
     room_prices = [
         coerce_positive_float(value)
-        for value in room_prices_df["monthly_rent"].tolist()
+        for value in normalized_room_prices_df["monthly_rent"].tolist()
         if not pd.isna(value)
     ]
     rooms = len(room_prices)
@@ -243,6 +369,13 @@ with room_area:
     net_rent = calculate_net_rental_income(gross_rent, rental_tax_rate)
     cashflow_before_costs = net_rent - monthly_payment
     cashflow_after_costs = net_rent - monthly_payment - monthly_costs
+
+    with rental_estimate_area:
+        st.markdown("**Rental estimate**")
+        estimate_col1, estimate_col2, estimate_col3 = st.columns(3)
+        estimate_col1.metric("Gross rent", money(gross_rent))
+        estimate_col2.metric("Net rent", money(net_rent))
+        estimate_col3.metric("Costs", money(monthly_costs))
 
     with room_chart_col:
         st.subheader("Rooms Break-even")
@@ -312,6 +445,7 @@ with repayment_area:
             value=4.0,
             step=0.25,
             format="%.2f",
+            help="Expected annual return for surplus cash invested instead of used for early mortgage repayment.",
         )
         default_events = pd.DataFrame(
             [
