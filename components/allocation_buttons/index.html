@@ -10,6 +10,8 @@
         --secondary-background-color: rgb(240, 242, 246);
         --text-color: rgb(49, 51, 63);
         --border-color: rgba(49, 51, 63, 0.2);
+        --button-hover-background-color: color-mix(in srgb, var(--primary-color) 100%, transparent);
+        --button-hover-text-color: rgb(255, 255, 255);
         font-family: "Source Sans Pro", sans-serif;
       }
 
@@ -29,32 +31,40 @@
 
       button {
         background: var(--secondary-background-color);
-        border: 1px solid var(--border-color);
+        border: 0;
         border-radius: 0.5rem;
         color: var(--text-color);
         cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         font: inherit;
-        font-size: 1.1rem;
         height: 2.5rem;
-        line-height: 1;
         margin: 0;
         padding: 0;
         width: 100%;
       }
 
       button:focus {
-        border-color: var(--primary-color);
-        box-shadow: inset 0 0 0 1px var(--primary-color);
         outline: none;
       }
 
       button:hover {
-        border-color: var(--primary-color);
-        color: var(--primary-color);
+        background: var(--button-hover-background-color);
+        color: var(--button-hover-text-color);
       }
 
       button:active {
-        color: var(--primary-color);
+        background: var(--button-hover-background-color);
+      }
+
+      svg {
+        height: 1.15rem;
+        stroke: currentColor;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 2.25;
+        width: 1.15rem;
       }
 
       @media (prefers-color-scheme: dark) {
@@ -63,6 +73,7 @@
           --secondary-background-color: rgb(38, 39, 48);
           --text-color: rgb(250, 250, 250);
           --border-color: rgba(250, 250, 250, 0.2);
+          --button-hover-background-color: color-mix(in srgb, var(--primary-color) 30%, transparent);
         }
       }
     </style>
@@ -74,14 +85,20 @@
         data-direction="invest"
         title="Move surplus from repayment to investment. Shift: 15%, Ctrl/Cmd: 30%."
       >
-        →
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 12h14" />
+          <path d="m13 6 6 6-6 6" />
+        </svg>
       </button>
       <button
         type="button"
         data-direction="repay"
         title="Move surplus from investment to repayment. Shift: 15%, Ctrl/Cmd: 30%."
       >
-        ←
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M19 12H5" />
+          <path d="m11 6-6 6 6 6" />
+        </svg>
       </button>
     </div>
 
