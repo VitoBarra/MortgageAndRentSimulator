@@ -107,6 +107,7 @@ Use this section to audit the exact values behind the charts and headline metric
 
 ```text
 main.py       Streamlit UI and orchestration
+charts.py     Plotly chart builders
 investment.py Repayment-vs-investment strategy and scenario helpers
 models.py     Shared dataclasses for typed calculation inputs and results
 mortgage.py   Mortgage payment, amortization, and repayment simulation helpers

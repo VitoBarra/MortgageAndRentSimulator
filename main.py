@@ -1,11 +1,16 @@
-from dataclasses import asdict
 from pathlib import Path
 
 import pandas as pd
-import plotly.express as px
 import streamlit as st
 import streamlit.components.v1 as components
 
+from charts import (
+    build_allocation_curve_fig,
+    build_balance_projection_fig,
+    build_room_break_even_fig,
+    build_scenario_heatmap_fig,
+    build_upfront_cost_fig,
+)
 from investment import (
     build_allocation_scenario_rows,
     build_return_scenario_rows,
@@ -267,14 +272,7 @@ initial_costs = pd.DataFrame(
 
 with purchase_chart_col:
     st.subheader("Upfront Cost Split")
-    upfront_fig = px.pie(
-        initial_costs[initial_costs["Amount"] > 0],
-        names="Cost",
-        values="Amount",
-        hole=0.45,
-    )
-    upfront_fig.update_traces(textposition="inside", textinfo="percent+label")
-    st.plotly_chart(upfront_fig, width="stretch")
+    st.plotly_chart(build_upfront_cost_fig(initial_costs), width="stretch")
 
 with room_area:
     st.divider()
@@ -416,19 +414,7 @@ with room_area:
             monthly_payment=monthly_payment,
             monthly_costs=monthly_costs,
         )
-        fig = px.bar(
-            room_scenarios,
-            x="rooms",
-            y="cashflow",
-            text="cashflow",
-            color="cashflow",
-            color_continuous_scale=["#b91c1c", "#f59e0b", "#15803d"],
-            labels={"rooms": "Rooms", "cashflow": "Monthly cashflow"},
-        )
-        fig.add_hline(y=0, line_dash="dash", line_color="#111827")
-        fig.update_traces(texttemplate="€%{text:.0f}", textposition="outside")
-        fig.update_layout(showlegend=False, yaxis_tickprefix="€")
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(build_room_break_even_fig(room_scenarios), width="stretch")
 
 with surplus_allocation_area:
     st.divider()
@@ -609,71 +595,22 @@ scenario_rows = build_return_scenario_rows(
     scenario_returns=scenario_returns,
 )
 scenario_df = pd.DataFrame(scenario_rows)
-scenario_heatmap = scenario_df.pivot(
-    index="Alternative return",
-    columns="Repayment share",
-    values="Total value vs best model",
-).reindex(index=scenario_returns, columns=scenario_shares)
-scenario_heatmap_limit = max(abs(scenario_heatmap.min().min()), abs(scenario_heatmap.max().max()))
-if scenario_heatmap_limit == 0:
-    scenario_heatmap_limit = 1
-scenario_fig = px.imshow(
-    scenario_heatmap,
-    text_auto=".0f",
-    color_continuous_scale=["#b91c1c", "#f8fafc", "#15803d"],
-    zmin=-scenario_heatmap_limit,
-    zmax=scenario_heatmap_limit,
-    labels={
-        "x": "Surplus used for repayment (%)",
-        "y": "Alternative annual return (%)",
-        "color": "Total value vs best model (€)",
-    },
-    aspect="auto",
-)
-scenario_fig.update_layout(
-    coloraxis_colorbar_tickprefix="€",
-    height=560,
-)
-scenario_fig.update_xaxes(type="category")
-scenario_fig.update_yaxes(
-    tickmode="linear",
-    tick0=-12,
-    dtick=1,
+scenario_fig = build_scenario_heatmap_fig(
+    scenario_df,
+    scenario_returns,
+    scenario_shares,
 )
 
 with combined_controls_col:
-    combined_projection = pd.DataFrame(asdict(row) for row in combined_result.schedule)
-    combined_projection["scenario"] = "Combined strategy"
-    base_projection = pd.DataFrame(asdict(row) for row in base_schedule)
-    base_projection["scenario"] = "Base mortgage"
-    combined_balance_projection = pd.concat(
-        [base_projection, combined_projection],
-        ignore_index=True,
+    combined_balance_fig = build_balance_projection_fig(
+        base_schedule,
+        combined_result.schedule,
+        repayment_events,
     )
-    combined_balance_projection["year"] = combined_balance_projection["month"] / 12
-
-    combined_balance_fig = px.line(
-        combined_balance_projection,
-        x="year",
-        y="balance",
-        color="scenario",
-        labels={
-            "year": "Year",
-            "balance": "Remaining debt",
-            "scenario": "Scenario",
-        },
-    )
-    for event in repayment_events:
-        combined_balance_fig.add_vline(
-            x=event.after_years,
-            line_dash="dot",
-            line_color="#6b7280",
-        )
     st.markdown("**Remaining debt projection**")
     st.caption(
         "The remaining-debt projection includes only the recurring extra principal from the selected split and any one-off repayment events."
     )
-    combined_balance_fig.update_layout(yaxis_tickprefix="€")
     st.plotly_chart(combined_balance_fig, width="stretch")
 
 with combined_chart_col:
@@ -768,19 +705,7 @@ with surplus_allocation_area:
     st.caption(
         f"This chart varies only the allocation slider from 0% to 100% repayment while keeping the selected annual return, rents, costs, one-off events, and analysis horizon fixed. Zero marks the best split at the selected return ({alternative_return:.2f}%); all other values show the selected split's total-value gap versus that best split. Total value includes the investment portfolio plus mortgage interest saved."
     )
-    comparison_line_fig = px.line(
-        allocation_scenario_df,
-        x="Repayment share",
-        y="Total value vs best model",
-        markers=True,
-        labels={
-            "Repayment share": "Surplus used for repayment (%)",
-            "Total value vs best model": "Total value gap vs best split (€)",
-        },
-    )
-    comparison_line_fig.update_layout(yaxis_tickprefix="€")
-    comparison_line_fig.add_hline(y=0, line_dash="dot", line_color="#6b7280")
-    st.plotly_chart(comparison_line_fig, width="stretch")
+    st.plotly_chart(build_allocation_curve_fig(allocation_scenario_df), width="stretch")
 
     st.markdown("**Scenario heatmap**")
     st.caption(
