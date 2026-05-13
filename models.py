@@ -77,6 +77,24 @@ class PurchaseCosts:
 
 
 @dataclass(frozen=True, slots=True)
+class RentVsInterestInputs:
+    current_monthly_rent: float
+    current_cash_available: float
+    monthly_saving_after_rent: float
+    cash_purchase_target: float
+    mortgage_interest: float
+
+
+@dataclass(frozen=True, slots=True)
+class RentVsInterestResult:
+    remaining_cash_to_save: float
+    months_to_cash_purchase: float | None
+    rent_paid_while_waiting: float | None
+    rent_equivalent_years: float | None
+    rent_minus_interest: float | None
+
+
+@dataclass(frozen=True, slots=True)
 class RentalInputs:
     rooms: int
     room_prices: list[float]

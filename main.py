@@ -23,6 +23,7 @@ from models import (
     PurchaseInputs,
     RentalInputs,
     RentalResult,
+    RentVsInterestInputs,
     RepaymentEvent,
 )
 from mortgage import (
@@ -33,6 +34,7 @@ from mortgage import (
     calculate_total_interest,
 )
 from rental import calculate_monthly_rental_income, calculate_net_rental_income
+from rent_vs_interest import evaluate_rent_vs_interest
 from scenarios import build_room_scenarios
 
 
@@ -116,6 +118,7 @@ st.title("Mortgage Simulator")
 
 summary_area = st.container()
 purchase_area = st.container()
+rent_vs_interest_area = st.container()
 room_area = st.container()
 surplus_allocation_area = st.container()
 details_area = st.container()
@@ -270,6 +273,83 @@ initial_costs = pd.DataFrame(
 with purchase_chart_col:
     st.subheader("Upfront Cost Split")
     st.plotly_chart(build_upfront_cost_fig(initial_costs), width="stretch")
+
+with rent_vs_interest_area:
+    st.divider()
+    st.subheader("Rent Vs Interest")
+    st.caption(
+        "Compares total mortgage interest with the rent you would pay while saving enough cash to buy the property outright. Monthly saving means money saved after paying rent and normal living expenses."
+    )
+    rent_compare_col1, rent_compare_col2 = st.columns([0.38, 0.62])
+
+    with rent_compare_col1:
+        current_monthly_rent = st.number_input(
+            "Current monthly rent",
+            min_value=0,
+            value=700,
+            step=50,
+            help="Rent you would keep paying if you delayed buying.",
+        )
+        current_cash_available = st.number_input(
+            "Current cash available",
+            min_value=0,
+            value=0,
+            step=1_000,
+            help="Cash already available for a future full-cash purchase.",
+        )
+        monthly_saving_after_rent = st.number_input(
+            "Monthly saving after rent",
+            min_value=0,
+            value=500,
+            step=50,
+            help="How much you can save each month after paying rent and normal living expenses.",
+        )
+
+    cash_purchase_target = house_price + initial_fixed_costs
+    rent_vs_interest = evaluate_rent_vs_interest(
+        RentVsInterestInputs(
+            current_monthly_rent=current_monthly_rent,
+            current_cash_available=current_cash_available,
+            monthly_saving_after_rent=monthly_saving_after_rent,
+            cash_purchase_target=cash_purchase_target,
+            mortgage_interest=total_interest,
+        )
+    )
+
+    with rent_compare_col2:
+        compare_metric_col1, compare_metric_col2, compare_metric_col3, compare_metric_col4 = st.columns(4)
+        compare_metric_col1.metric(
+            "Time to buy cash",
+            (
+                f"{rent_vs_interest.months_to_cash_purchase / 12:.1f} years"
+                if rent_vs_interest.months_to_cash_purchase is not None
+                else "Not reachable"
+            ),
+        )
+        compare_metric_col2.metric(
+            "Rent while waiting",
+            (
+                money(rent_vs_interest.rent_paid_while_waiting)
+                if rent_vs_interest.rent_paid_while_waiting is not None
+                else "N/A"
+            ),
+        )
+        compare_metric_col3.metric("Mortgage interest", money(total_interest))
+        compare_metric_col4.metric(
+            "Rent minus interest",
+            (
+                money_delta(rent_vs_interest.rent_minus_interest)
+                if rent_vs_interest.rent_minus_interest is not None
+                else "N/A"
+            ),
+        )
+        if rent_vs_interest.rent_equivalent_years is not None:
+            st.caption(
+                f"Total mortgage interest is equivalent to about {rent_vs_interest.rent_equivalent_years:.1f} years of your current rent."
+            )
+        st.caption(
+            "This simple comparison ignores house price changes, investment returns, inflation, taxes, and the opportunity cost of using cash."
+        )
 
 with room_area:
     st.divider()

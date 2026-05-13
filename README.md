@@ -55,6 +55,18 @@ Notary and agency costs can be entered either as fixed euro amounts or as percen
 
 The nearby pie chart shows how upfront cash is split across down payment and initial costs.
 
+### Rent Vs Interest
+
+Compares mortgage interest with the rent you would pay while saving enough cash to buy outright.
+
+Inputs:
+
+- current monthly rent
+- current cash available
+- monthly saving after rent and normal living expenses
+
+The section estimates time to buy cash, rent paid while waiting, total mortgage interest, and the difference between rent paid while waiting and mortgage interest.
+
 ### Room Pricing
 
 Models the rental side of the property:

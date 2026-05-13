@@ -16,6 +16,7 @@ from models import (
     PurchaseInputs,
     RentalInputs,
     RentalResult,
+    RentVsInterestInputs,
     RepaymentResult,
     RepaymentEvent,
     ScheduleRow,
@@ -213,6 +214,46 @@ class ModelTests(unittest.TestCase):
 
         self.assertEqual(result.net_rent, 790)
         self.assertEqual(result.cashflow_after_costs, 130)
+
+
+class RentVsInterestTests(unittest.TestCase):
+    def test_rent_vs_interest_estimates_waiting_cost(self):
+        from rent_vs_interest import evaluate_rent_vs_interest
+
+        result = evaluate_rent_vs_interest(
+            RentVsInterestInputs(
+                current_monthly_rent=700,
+                current_cash_available=20_000,
+                monthly_saving_after_rent=1_000,
+                cash_purchase_target=140_000,
+                mortgage_interest=42_000,
+            )
+        )
+
+        self.assertEqual(result.remaining_cash_to_save, 120_000)
+        self.assertEqual(result.months_to_cash_purchase, 120)
+        self.assertEqual(result.rent_paid_while_waiting, 84_000)
+        self.assertEqual(result.rent_equivalent_years, 5)
+        self.assertEqual(result.rent_minus_interest, 42_000)
+
+    def test_rent_vs_interest_handles_zero_saving_capacity(self):
+        from rent_vs_interest import evaluate_rent_vs_interest
+
+        result = evaluate_rent_vs_interest(
+            RentVsInterestInputs(
+                current_monthly_rent=700,
+                current_cash_available=20_000,
+                monthly_saving_after_rent=0,
+                cash_purchase_target=140_000,
+                mortgage_interest=42_000,
+            )
+        )
+
+        self.assertEqual(result.remaining_cash_to_save, 120_000)
+        self.assertIsNone(result.months_to_cash_purchase)
+        self.assertIsNone(result.rent_paid_while_waiting)
+        self.assertEqual(result.rent_equivalent_years, 5)
+        self.assertIsNone(result.rent_minus_interest)
 
 
 class ScenarioCalculationTests(unittest.TestCase):

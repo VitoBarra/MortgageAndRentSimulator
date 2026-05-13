@@ -138,6 +138,38 @@ balance = balance - principal_payment""",
                 "scenario_cashflow = scenario_net_rent - monthly_payment - monthly_costs",
             )
 
+        with st.expander("Rent vs interest", expanded=False):
+            documentation_formula(
+                formula_view,
+                "**Cash purchase target.** To buy outright, the model assumes you need the house price plus initial fixed costs.",
+                r"T = H + C",
+                "cash_purchase_target = house_price + initial_fixed_costs",
+            )
+            documentation_formula(
+                formula_view,
+                "**Time to buy cash.** Remaining cash needed is divided by monthly saving after rent.",
+                r"t = \frac{\max(T - A, 0)}{S}",
+                "months_to_cash_purchase = max(cash_purchase_target - current_cash_available, 0) / monthly_saving_after_rent",
+            )
+            documentation_formula(
+                formula_view,
+                "**Rent paid while waiting.** If you wait to buy in cash, the model multiplies current rent by the estimated saving period.",
+                r"R_\text{wait} = R_\text{monthly} \times t",
+                "rent_paid_while_waiting = current_monthly_rent * months_to_cash_purchase",
+            )
+            documentation_formula(
+                formula_view,
+                "**Rent-equivalent interest.** Mortgage interest is expressed as years of current rent.",
+                r"Y = \frac{I_\text{mortgage}}{12 \times R_\text{monthly}}",
+                "rent_equivalent_years = total_interest / (current_monthly_rent * 12)",
+            )
+            documentation_formula(
+                formula_view,
+                "**Rent minus interest.** Positive values mean waiting rent is higher than mortgage interest in this simplified comparison.",
+                r"\Delta = R_\text{wait} - I_\text{mortgage}",
+                "rent_minus_interest = rent_paid_while_waiting - total_interest",
+            )
+
         with st.expander("Surplus allocation, repayment, and investment", expanded=False):
             documentation_formula(
                 formula_view,
@@ -225,6 +257,7 @@ pre_payoff_future_value = pre_payoff_value_at_payoff * (1 + annual_return / 100)
 - Operating costs are subtracted before surplus is split between repayment and investment.
 - After mortgage payoff, full net rent after operating costs is modeled as invested until the selected analysis horizon.
 - One-off repayment events are treated as mortgage repayments only; they are not also counted as invested cash.
+- Rent-vs-interest comparison ignores house price changes, investment returns, inflation, taxes, and opportunity cost.
 - Rental tax is a user-entered rate. The app does not determine the correct tax regime.
 - Alternative investment return is a user assumption, not a forecast or guarantee.
 - The app does not include inflation, vacancies beyond the occupancy input, transaction timing, tax deductions, insurance, IMU, personal income tax brackets, or investment taxes.
