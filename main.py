@@ -7,6 +7,7 @@ import streamlit.components.v1 as components
 from charts import (
     build_allocation_curve_fig,
     build_balance_projection_fig,
+    build_rent_vs_interest_heatmap_fig,
     build_room_break_even_fig,
     build_scenario_heatmap_fig,
     build_upfront_cost_fig,
@@ -34,7 +35,10 @@ from mortgage import (
     calculate_total_interest,
 )
 from rental import calculate_monthly_rental_income, calculate_net_rental_income
-from rent_vs_interest import evaluate_rent_vs_interest
+from rent_vs_interest import (
+    build_rent_vs_interest_sensitivity_rows,
+    evaluate_rent_vs_interest,
+)
 from scenarios import build_room_scenarios
 
 
@@ -304,6 +308,36 @@ with rent_vs_interest_area:
             step=50,
             help="How much you can save each month after paying rent and normal living expenses.",
         )
+        estimated_monthly_saving_if_buy_now = (
+            monthly_saving_after_rent
+            + current_monthly_rent
+            - monthly_payment
+        )
+        monthly_saving_if_buy_now = st.number_input(
+            "Monthly saving if buying now",
+            min_value=0,
+            value=int(max(estimated_monthly_saving_if_buy_now, 0)),
+            step=50,
+            help="How much you expect to save or invest each month after buying and paying the mortgage.",
+        )
+        house_price_growth_rate = st.number_input(
+            "Expected house price growth",
+            min_value=-10.0,
+            max_value=15.0,
+            value=0.0,
+            step=0.25,
+            format="%.2f",
+            help="Expected annual change in the property price while you wait.",
+        )
+        savings_return_rate = st.number_input(
+            "Expected savings return",
+            min_value=-10.0,
+            max_value=15.0,
+            value=0.0,
+            step=0.25,
+            format="%.2f",
+            help="Expected annual return on the cash you keep saving while renting.",
+        )
 
     cash_purchase_target = house_price + initial_fixed_costs
     rent_vs_interest = evaluate_rent_vs_interest(
@@ -311,14 +345,42 @@ with rent_vs_interest_area:
             current_monthly_rent=current_monthly_rent,
             current_cash_available=current_cash_available,
             monthly_saving_after_rent=monthly_saving_after_rent,
+            monthly_saving_if_buy_now=monthly_saving_if_buy_now,
             cash_purchase_target=cash_purchase_target,
             mortgage_interest=total_interest,
+            house_price_growth_rate=house_price_growth_rate,
+            savings_return_rate=savings_return_rate,
+        )
+    )
+    rent_sensitivity_rates = [float(value) for value in range(-6, 7)]
+    rent_sensitivity_df = pd.DataFrame(
+        build_rent_vs_interest_sensitivity_rows(
+            RentVsInterestInputs(
+                current_monthly_rent=current_monthly_rent,
+                current_cash_available=current_cash_available,
+                monthly_saving_after_rent=monthly_saving_after_rent,
+                monthly_saving_if_buy_now=monthly_saving_if_buy_now,
+                cash_purchase_target=cash_purchase_target,
+                mortgage_interest=total_interest,
+                house_price_growth_rate=house_price_growth_rate,
+                savings_return_rate=savings_return_rate,
+            ),
+            house_price_growth_rates=rent_sensitivity_rates,
+            savings_return_rates=rent_sensitivity_rates,
         )
     )
 
     with rent_compare_col2:
-        compare_metric_col1, compare_metric_col2, compare_metric_col3, compare_metric_col4 = st.columns(4)
+        compare_metric_col1, compare_metric_col2, compare_metric_col3, compare_metric_col4, compare_metric_col5 = st.columns(5)
         compare_metric_col1.metric(
+            "Cash target",
+            (
+                money(rent_vs_interest.future_cash_purchase_target)
+                if rent_vs_interest.future_cash_purchase_target is not None
+                else "N/A"
+            ),
+        )
+        compare_metric_col2.metric(
             "Time to buy cash",
             (
                 f"{rent_vs_interest.months_to_cash_purchase / 12:.1f} years"
@@ -326,7 +388,7 @@ with rent_vs_interest_area:
                 else "Not reachable"
             ),
         )
-        compare_metric_col2.metric(
+        compare_metric_col3.metric(
             "Rent while waiting",
             (
                 money(rent_vs_interest.rent_paid_while_waiting)
@@ -334,21 +396,54 @@ with rent_vs_interest_area:
                 else "N/A"
             ),
         )
-        compare_metric_col3.metric("Mortgage interest", money(total_interest))
-        compare_metric_col4.metric(
-            "Rent minus interest",
+        compare_metric_col4.metric("Mortgage interest", money(total_interest))
+        compare_metric_col5.metric(
+            "Buy-now advantage",
             (
-                money_delta(rent_vs_interest.rent_minus_interest)
-                if rent_vs_interest.rent_minus_interest is not None
+                money_delta(rent_vs_interest.buy_now_advantage_vs_waiting)
+                if rent_vs_interest.buy_now_advantage_vs_waiting is not None
                 else "N/A"
             ),
         )
+        st.caption(
+            f"Rent/mortgage helper: based only on current rent and the mortgage payment, buying now would change monthly saving by {money_delta(estimated_monthly_saving_if_buy_now - monthly_saving_after_rent)}."
+        )
+        if estimated_monthly_saving_if_buy_now < 0:
+            st.warning(
+                f"Buying now may create a monthly cashflow gap of {money(abs(estimated_monthly_saving_if_buy_now))} before other owner costs."
+            )
         if rent_vs_interest.rent_equivalent_years is not None:
             st.caption(
                 f"Total mortgage interest is equivalent to about {rent_vs_interest.rent_equivalent_years:.1f} years of your current rent."
             )
+        if rent_vs_interest.buy_now_advantage_vs_waiting is None:
+            st.warning(
+                "At these assumptions, buying in cash is not reachable within the modeled 100-year horizon."
+            )
+        elif rent_vs_interest.buy_now_advantage_vs_waiting > 0:
+            st.success(
+                f"Simple read: buying now is ahead by {money(rent_vs_interest.buy_now_advantage_vs_waiting)} versus waiting in this simplified comparison."
+            )
+        elif rent_vs_interest.buy_now_advantage_vs_waiting < 0:
+            st.info(
+                f"Simple read: waiting to buy in cash is ahead by {money(abs(rent_vs_interest.buy_now_advantage_vs_waiting))} in this simplified comparison."
+            )
+        else:
+            st.info("Simple read: buying now and waiting are roughly equal in this simplified comparison.")
         st.caption(
-            "This simple comparison ignores house price changes, investment returns, inflation, taxes, and the opportunity cost of using cash."
+            "This simple comparison still ignores inflation, taxes, and the opportunity cost of using cash for the purchase."
+        )
+        st.markdown("**Growth and return sensitivity**")
+        st.caption(
+            "The heatmap varies house price growth and savings return around 0%, 0%. Positive values favor buying now; negative values favor waiting to buy in cash."
+        )
+        st.plotly_chart(
+            build_rent_vs_interest_heatmap_fig(
+                rent_sensitivity_df,
+                house_price_growth_rates=rent_sensitivity_rates,
+                savings_return_rates=rent_sensitivity_rates,
+            ),
+            width="stretch",
         )
 
 with room_area:

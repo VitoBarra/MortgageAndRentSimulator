@@ -81,15 +81,22 @@ class RentVsInterestInputs:
     current_monthly_rent: float
     current_cash_available: float
     monthly_saving_after_rent: float
+    monthly_saving_if_buy_now: float
     cash_purchase_target: float
     mortgage_interest: float
+    house_price_growth_rate: float = 0
+    savings_return_rate: float = 0
 
 
 @dataclass(frozen=True, slots=True)
 class RentVsInterestResult:
     remaining_cash_to_save: float
     months_to_cash_purchase: float | None
+    future_cash_purchase_target: float | None
+    saved_cash_at_purchase: float | None
     rent_paid_while_waiting: float | None
+    buy_now_savings_while_waiting: float | None
+    buy_now_advantage_vs_waiting: float | None
     rent_equivalent_years: float | None
     rent_minus_interest: float | None
 

@@ -225,6 +225,7 @@ class RentVsInterestTests(unittest.TestCase):
                 current_monthly_rent=700,
                 current_cash_available=20_000,
                 monthly_saving_after_rent=1_000,
+                monthly_saving_if_buy_now=200,
                 cash_purchase_target=140_000,
                 mortgage_interest=42_000,
             )
@@ -232,9 +233,62 @@ class RentVsInterestTests(unittest.TestCase):
 
         self.assertEqual(result.remaining_cash_to_save, 120_000)
         self.assertEqual(result.months_to_cash_purchase, 120)
+        self.assertEqual(result.future_cash_purchase_target, 140_000)
+        self.assertEqual(result.saved_cash_at_purchase, 140_000)
         self.assertEqual(result.rent_paid_while_waiting, 84_000)
+        self.assertEqual(result.buy_now_savings_while_waiting, 24_000)
+        self.assertEqual(result.buy_now_advantage_vs_waiting, 66_000)
         self.assertEqual(result.rent_equivalent_years, 5)
         self.assertEqual(result.rent_minus_interest, 42_000)
+
+    def test_rent_vs_interest_applies_growth_and_savings_return(self):
+        from rent_vs_interest import evaluate_rent_vs_interest
+
+        result = evaluate_rent_vs_interest(
+            RentVsInterestInputs(
+                current_monthly_rent=700,
+                current_cash_available=20_000,
+                monthly_saving_after_rent=1_000,
+                monthly_saving_if_buy_now=200,
+                cash_purchase_target=140_000,
+                mortgage_interest=42_000,
+                house_price_growth_rate=2,
+                savings_return_rate=4,
+            )
+        )
+
+        self.assertIsNotNone(result.months_to_cash_purchase)
+        self.assertGreater(result.future_cash_purchase_target, 140_000)
+        self.assertGreaterEqual(
+            result.saved_cash_at_purchase,
+            result.future_cash_purchase_target,
+        )
+        self.assertGreater(result.rent_paid_while_waiting, 0)
+        self.assertGreater(result.buy_now_savings_while_waiting, 0)
+
+    def test_rent_vs_interest_sensitivity_rows_vary_growth_and_return(self):
+        from rent_vs_interest import build_rent_vs_interest_sensitivity_rows
+
+        rows = build_rent_vs_interest_sensitivity_rows(
+            RentVsInterestInputs(
+                current_monthly_rent=700,
+                current_cash_available=20_000,
+                monthly_saving_after_rent=1_000,
+                monthly_saving_if_buy_now=200,
+                cash_purchase_target=140_000,
+                mortgage_interest=42_000,
+            ),
+            house_price_growth_rates=[-1, 0, 1],
+            savings_return_rates=[-1, 0, 1],
+        )
+
+        self.assertEqual(len(rows), 9)
+        zero_zero_row = next(
+            row
+            for row in rows
+            if row["House price growth"] == 0 and row["Savings return"] == 0
+        )
+        self.assertEqual(zero_zero_row["Buy-now advantage"], 66_000)
 
     def test_rent_vs_interest_handles_zero_saving_capacity(self):
         from rent_vs_interest import evaluate_rent_vs_interest
@@ -244,6 +298,7 @@ class RentVsInterestTests(unittest.TestCase):
                 current_monthly_rent=700,
                 current_cash_available=20_000,
                 monthly_saving_after_rent=0,
+                monthly_saving_if_buy_now=0,
                 cash_purchase_target=140_000,
                 mortgage_interest=42_000,
             )
@@ -251,7 +306,11 @@ class RentVsInterestTests(unittest.TestCase):
 
         self.assertEqual(result.remaining_cash_to_save, 120_000)
         self.assertIsNone(result.months_to_cash_purchase)
+        self.assertIsNone(result.future_cash_purchase_target)
+        self.assertIsNone(result.saved_cash_at_purchase)
         self.assertIsNone(result.rent_paid_while_waiting)
+        self.assertIsNone(result.buy_now_savings_while_waiting)
+        self.assertIsNone(result.buy_now_advantage_vs_waiting)
         self.assertEqual(result.rent_equivalent_years, 5)
         self.assertIsNone(result.rent_minus_interest)
 

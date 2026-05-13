@@ -64,8 +64,11 @@ Inputs:
 - current monthly rent
 - current cash available
 - monthly saving after rent and normal living expenses
+- monthly saving if buying now
+- expected house price growth
+- expected return on saved cash
 
-The section estimates time to buy cash, rent paid while waiting, total mortgage interest, and the difference between rent paid while waiting and mortgage interest.
+The section estimates time to buy cash, future cash purchase target, rent paid while waiting, total mortgage interest, buy-now savings during the waiting horizon, and a buy-now advantage score. It also shows a sensitivity heatmap around 0% house price growth and 0% savings return.
 
 ### Room Pricing
 

@@ -141,15 +141,27 @@ balance = balance - principal_payment""",
         with st.expander("Rent vs interest", expanded=False):
             documentation_formula(
                 formula_view,
-                "**Cash purchase target.** To buy outright, the model assumes you need the house price plus initial fixed costs.",
+                "**Initial cash purchase target.** To buy outright, the model starts from the house price plus initial fixed costs.",
                 r"T = H + C",
                 "cash_purchase_target = house_price + initial_fixed_costs",
             )
             documentation_formula(
                 formula_view,
-                "**Time to buy cash.** Remaining cash needed is divided by monthly saving after rent.",
-                r"t = \frac{\max(T - A, 0)}{S}",
-                "months_to_cash_purchase = max(cash_purchase_target - current_cash_available, 0) / monthly_saving_after_rent",
+                "**Growing cash purchase target.** While waiting, the cash target can grow or shrink with the expected house price growth assumption.",
+                r"T_t = T_{t-1} \times (1 + g)",
+                "future_cash_purchase_target *= 1 + monthly_house_growth",
+            )
+            documentation_formula(
+                formula_view,
+                "**Saved cash growth.** Current cash and new monthly savings can compound with the expected savings return assumption.",
+                r"A_t = A_{t-1} \times (1 + r) + S",
+                "saved_cash = saved_cash * (1 + monthly_savings_return) + monthly_saving_after_rent",
+            )
+            documentation_formula(
+                formula_view,
+                "**Time to buy cash.** The model simulates month by month until saved cash reaches the future cash purchase target.",
+                r"A_t \geq T_t",
+                "months_to_cash_purchase = first_month_where_saved_cash_reaches_target",
             )
             documentation_formula(
                 formula_view,
@@ -168,6 +180,18 @@ balance = balance - principal_payment""",
                 "**Rent minus interest.** Positive values mean waiting rent is higher than mortgage interest in this simplified comparison.",
                 r"\Delta = R_\text{wait} - I_\text{mortgage}",
                 "rent_minus_interest = rent_paid_while_waiting - total_interest",
+            )
+            documentation_formula(
+                formula_view,
+                "**Buy-now savings during the waiting horizon.** If you buy now, the model compounds your expected monthly saving over the same number of months it would take to buy in cash.",
+                r"FV_\text{buy-now savings} = \sum_{t=1}^{n} S_\text{buy} (1 + r)^{n-t}",
+                "buy_now_savings_while_waiting = future_value_monthly_for_months(monthly_saving_if_buy_now, savings_return_rate, months_to_cash_purchase)",
+            )
+            documentation_formula(
+                formula_view,
+                "**Buy-now advantage.** Positive values favor buying now; negative values favor waiting to buy in cash.",
+                r"A = R_\text{wait} + FV_\text{buy-now savings} - I_\text{mortgage}",
+                "buy_now_advantage = rent_paid_while_waiting + buy_now_savings_while_waiting - total_interest",
             )
 
         with st.expander("Surplus allocation, repayment, and investment", expanded=False):

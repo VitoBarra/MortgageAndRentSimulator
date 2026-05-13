@@ -76,6 +76,42 @@ def build_scenario_heatmap_fig(
     return fig
 
 
+def build_rent_vs_interest_heatmap_fig(
+    sensitivity_df: pd.DataFrame,
+    house_price_growth_rates: list[float],
+    savings_return_rates: list[float],
+):
+    heatmap = sensitivity_df.pivot(
+        index="House price growth",
+        columns="Savings return",
+        values="Buy-now advantage",
+    ).reindex(index=house_price_growth_rates, columns=savings_return_rates)
+    heatmap_limit = max(abs(heatmap.min().min()), abs(heatmap.max().max()))
+    if pd.isna(heatmap_limit) or heatmap_limit == 0:
+        heatmap_limit = 1
+
+    fig = px.imshow(
+        heatmap,
+        text_auto=".0f",
+        color_continuous_scale=["#b91c1c", "#f8fafc", "#15803d"],
+        zmin=-heatmap_limit,
+        zmax=heatmap_limit,
+        labels={
+            "x": "Expected savings return (%)",
+            "y": "Expected house price growth (%)",
+            "color": "Buy-now advantage (€)",
+        },
+        aspect="auto",
+    )
+    fig.update_layout(
+        coloraxis_colorbar_tickprefix="€",
+        height=480,
+    )
+    fig.update_xaxes(type="category")
+    fig.update_yaxes(type="category")
+    return fig
+
+
 def build_balance_projection_fig(
     base_schedule: list[ScheduleRow],
     combined_schedule: list[ScheduleRow],
