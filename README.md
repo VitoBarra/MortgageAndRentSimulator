@@ -22,6 +22,12 @@ pip install -r requirements.txt
 streamlit run main.py
 ```
 
+## Run Tests
+
+```bash
+make test
+```
+
 ## Main Sections
 
 ### Summary
@@ -101,8 +107,10 @@ Use this section to audit the exact values behind the charts and headline metric
 
 ```text
 main.py       Streamlit UI and orchestration
+investment.py Repayment-vs-investment strategy and scenario helpers
 mortgage.py   Mortgage payment, amortization, and repayment simulation helpers
 rental.py     Rental income helpers
 scenarios.py  Room scenario helpers
+tests/        Calculation regression tests
 components/   Local Streamlit components for custom cost inputs and allocation buttons
 ```
