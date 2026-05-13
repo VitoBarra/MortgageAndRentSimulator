@@ -255,11 +255,6 @@ monthly_payment = calculate_monthly_payment(
     purchase_inputs.years,
     purchase_inputs.amortization_method,
 )
-monthly_payment_label = (
-    "Monthly payment"
-    if amortization_method == FRENCH_AMORTIZATION
-    else "Initial monthly payment"
-)
 total_interest = calculate_total_interest(
     purchase_inputs.mortgage_amount,
     purchase_inputs.annual_rate,
@@ -333,7 +328,7 @@ with room_area:
                 pd.DataFrame(
                     {
                         "room": ["Room 1", "Room 2", "Room 3"],
-                        "monthly_rent": [400, 425, 450],
+                        "monthly_rent": [500, 500, 500],
                     }
                 )
             )
@@ -515,6 +510,10 @@ base_schedule = build_standard_schedule(
     monthly_payment,
     amortization_method,
 )
+monthly_payment_label = "Monthly payment"
+monthly_payment_value = money(monthly_payment)
+if amortization_method != FRENCH_AMORTIZATION and base_schedule:
+    monthly_payment_value = f"{money(base_schedule[0].payment)} to {money(base_schedule[-1].payment)}"
 monthly_expendable_cashflow = max(cashflow_after_costs, 0)
 monthly_cashflow_deficit = max(-cashflow_after_costs, 0)
 rent_surplus_to_mortgage = monthly_expendable_cashflow * repayment_share / 100
@@ -721,7 +720,7 @@ with surplus_allocation_area:
 
     st.markdown("**Scenario heatmap**")
     st.caption(
-        "Each return row compares every repayment split against that row's best split. The heatmap now spans the full modeled return range from -12% to 12%. Zero marks the best split for that return. Total value includes investment portfolio value plus mortgage interest saved."
+        "Each return row compares every repayment split against the 50/50 allocation for that same return. The 50% repayment column is therefore zero. Positive values outperform 50/50; negative values underperform it. Total value includes investment portfolio value plus mortgage interest saved."
     )
     st.plotly_chart(scenario_fig, width="stretch")
 
@@ -732,9 +731,9 @@ with surplus_allocation_area:
 with summary_area:
     st.subheader("Summary")
     summary_col1, summary_col2, summary_col3, summary_col4, summary_col5, summary_col6 = st.columns(6)
-    summary_col1.metric("Upfront cash", money(upfront_cash_needed))
-    summary_col2.metric("Mortgage amount", money(mortgage_amount))
-    summary_col3.metric(monthly_payment_label, money(monthly_payment))
+    summary_col1.metric("Mortgage amount", money(mortgage_amount))
+    summary_col2.metric("Upfront cash", money(upfront_cash_needed))
+    summary_col3.metric(monthly_payment_label, monthly_payment_value)
     summary_col4.metric("Total interest", money(total_interest))
     summary_col5.metric("Net rent", money(net_rent))
     summary_col6.metric("Monthly cashflow", money(cashflow_after_costs))
@@ -752,7 +751,7 @@ with details_area:
             ("Annual interest rate", f"{annual_rate:.1f}%"),
             ("Mortgage duration", f"{years} years"),
             ("Amortization method", amortization_method),
-            (monthly_payment_label, money(monthly_payment)),
+            (monthly_payment_label, monthly_payment_value),
             ("Base total interest", money(total_interest)),
         ],
         columns=["Item", "Value"],

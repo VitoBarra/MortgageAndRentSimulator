@@ -215,12 +215,14 @@ def build_return_scenario_rows(
                 }
             )
 
-        best_total_value = max(
-            scenario_row["Total split value"] for scenario_row in return_scenarios
+        fifty_fifty_total_value = next(
+            scenario_row["Total split value"]
+            for scenario_row in return_scenarios
+            if scenario_row["Repayment share"] == 50
         )
         for scenario_row in return_scenarios:
-            scenario_row["Total value vs best model"] = (
-                scenario_row["Total split value"] - best_total_value
+            scenario_row["Total value vs 50/50 split"] = (
+                scenario_row["Total split value"] - fifty_fifty_total_value
             )
         rows.extend(return_scenarios)
 

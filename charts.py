@@ -41,7 +41,7 @@ def build_scenario_heatmap_fig(
     scenario_heatmap = scenario_df.pivot(
         index="Alternative return",
         columns="Repayment share",
-        values="Total value vs best model",
+        values="Total value vs 50/50 split",
     ).reindex(index=scenario_returns, columns=scenario_shares)
     scenario_heatmap_limit = max(
         abs(scenario_heatmap.min().min()),
@@ -59,7 +59,7 @@ def build_scenario_heatmap_fig(
         labels={
             "x": "Surplus used for repayment (%)",
             "y": "Alternative annual return (%)",
-            "color": "Total value vs best model (€)",
+            "color": "Total value vs 50/50 split (€)",
         },
         aspect="auto",
     )

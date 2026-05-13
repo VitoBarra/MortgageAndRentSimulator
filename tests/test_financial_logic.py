@@ -324,7 +324,7 @@ class InvestmentFormulaTests(unittest.TestCase):
         self.assertEqual([row["Investment share"] for row in rows], [100, 50, 0])
         self.assertTrue(all(row["Total split value"] > 0 for row in rows))
 
-    def test_return_scenario_rows_mark_best_model_per_return(self):
+    def test_return_scenario_rows_compare_against_fifty_fifty_per_return(self):
         from investment import build_return_scenario_rows
 
         rows = build_return_scenario_rows(
@@ -346,10 +346,10 @@ class InvestmentFormulaTests(unittest.TestCase):
             return_rows = [
                 row for row in rows if row["Alternative return"] == scenario_return
             ]
-            self.assertEqual(
-                max(row["Total value vs best model"] for row in return_rows),
-                0,
+            fifty_fifty_row = next(
+                row for row in return_rows if row["Repayment share"] == 50
             )
+            self.assertEqual(fifty_fifty_row["Total value vs 50/50 split"], 0)
 
 
 if __name__ == "__main__":
