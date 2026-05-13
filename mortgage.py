@@ -1,3 +1,6 @@
+from models import RepaymentEvent, RepaymentResult, ScheduleRow
+
+
 def calculate_monthly_payment(principal: float, annual_rate: float, years: int) -> float:
     return calculate_monthly_payment_for_months(principal, annual_rate, years * 12)
 
@@ -31,7 +34,7 @@ def _build_schedule_with_extra_payment(
     years: int,
     monthly_payment: float,
     extra_monthly_payment: float = 0,
-) -> list[dict]:
+) -> list[ScheduleRow]:
     if principal <= 0:
         return []
 
@@ -49,13 +52,13 @@ def _build_schedule_with_extra_payment(
 
         balance -= principal_payment
         schedule.append(
-            {
-                "month": month,
-                "payment": interest + principal_payment,
-                "interest": interest,
-                "principal": principal_payment,
-                "balance": max(balance, 0),
-            }
+            ScheduleRow(
+                month=month,
+                payment=interest + principal_payment,
+                interest=interest,
+                principal=principal_payment,
+                balance=max(balance, 0),
+            )
         )
 
         if balance <= 0:
@@ -69,7 +72,7 @@ def build_standard_schedule(
     annual_rate: float,
     years: int,
     monthly_payment: float | None = None,
-) -> list[dict]:
+) -> list[ScheduleRow]:
     monthly_payment = monthly_payment or calculate_monthly_payment(
         principal,
         annual_rate,
@@ -83,7 +86,7 @@ def simulate_room_rent_repayment(
     annual_rate: float,
     years: int,
     room_rent_income: float,
-) -> dict:
+) -> RepaymentResult:
     base_payment = calculate_monthly_payment(principal, annual_rate, years)
     base_schedule = build_standard_schedule(principal, annual_rate, years, base_payment)
     extra_payment = max(room_rent_income, 0)
@@ -95,17 +98,29 @@ def simulate_room_rent_repayment(
         extra_payment,
     )
 
-    base_total_interest = sum(row["interest"] for row in base_schedule)
-    total_interest = sum(row["interest"] for row in schedule)
+    base_total_interest = sum(row.interest for row in base_schedule)
+    total_interest = sum(row.interest for row in schedule)
 
-    return {
-        "monthly_payment": base_payment + extra_payment,
-        "extra_payment": extra_payment,
-        "months": len(schedule),
-        "total_interest": total_interest,
-        "interest_saved": base_total_interest - total_interest,
-        "schedule": schedule,
-    }
+    return RepaymentResult(
+        monthly_payment=base_payment + extra_payment,
+        extra_payment=extra_payment,
+        months=len(schedule),
+        total_interest=total_interest,
+        interest_saved=base_total_interest - total_interest,
+        schedule=schedule,
+    )
+
+
+def _event_amount(event: dict | RepaymentEvent) -> float:
+    if isinstance(event, RepaymentEvent):
+        return max(float(event.amount), 0)
+    return max(float(event.get("amount", 0)), 0)
+
+
+def _event_after_years(event: dict | RepaymentEvent) -> float:
+    if isinstance(event, RepaymentEvent):
+        return max(float(event.after_years), 0)
+    return max(float(event.get("after_years", 0)), 0)
 
 
 def simulate_combined_repayment(
@@ -113,8 +128,8 @@ def simulate_combined_repayment(
     annual_rate: float,
     years: int,
     room_rent_income: float,
-    repayment_events: list[dict],
-) -> dict:
+    repayment_events: list[dict | RepaymentEvent],
+) -> RepaymentResult:
     base_payment = calculate_monthly_payment(principal, annual_rate, years)
     base_schedule = build_standard_schedule(principal, annual_rate, years, base_payment)
     total_months = years * 12
@@ -123,8 +138,8 @@ def simulate_combined_repayment(
     event_map: dict[int, float] = {}
     normalized_events = []
     for event in repayment_events:
-        amount = max(float(event.get("amount", 0)), 0)
-        after_years = max(float(event.get("after_years", 0)), 0)
+        amount = _event_amount(event)
+        after_years = _event_after_years(event)
         if amount > 0 and after_years > 0:
             month = min(max(int(round(after_years * 12)), 1), total_months)
             event_map[month] = event_map.get(month, 0) + amount
@@ -149,33 +164,33 @@ def simulate_combined_repayment(
         extra_payment = recurring_applied + event_applied
 
         schedule.append(
-            {
-                "month": month,
-                "payment": interest + principal_payment + extra_payment,
-                "interest": interest,
-                "principal": principal_payment + extra_payment,
-                "extra_payment": extra_payment,
-                "balance": max(balance, 0),
-            }
+            ScheduleRow(
+                month=month,
+                payment=interest + principal_payment + extra_payment,
+                interest=interest,
+                principal=principal_payment + extra_payment,
+                extra_payment=extra_payment,
+                balance=max(balance, 0),
+            )
         )
 
         if balance <= 0:
             break
 
-    base_total_interest = sum(row["interest"] for row in base_schedule)
-    total_interest = sum(row["interest"] for row in schedule)
-    total_extra_payment = sum(row["extra_payment"] for row in schedule)
+    base_total_interest = sum(row.interest for row in base_schedule)
+    total_interest = sum(row.interest for row in schedule)
+    total_extra_payment = sum(row.extra_payment for row in schedule)
 
-    return {
-        "monthly_payment": base_payment,
-        "room_rent_income": recurring_extra,
-        "extra_payment_total": total_extra_payment,
-        "event_total": sum(amount for _, amount in normalized_events),
-        "months": len(schedule),
-        "total_interest": total_interest,
-        "interest_saved": base_total_interest - total_interest,
-        "schedule": schedule,
-    }
+    return RepaymentResult(
+        monthly_payment=base_payment,
+        room_rent_income=recurring_extra,
+        extra_payment_total=total_extra_payment,
+        event_total=sum(amount for _, amount in normalized_events),
+        months=len(schedule),
+        total_interest=total_interest,
+        interest_saved=base_total_interest - total_interest,
+        schedule=schedule,
+    )
 
 
 def simulate_partial_repayment(
@@ -185,7 +200,7 @@ def simulate_partial_repayment(
     repayment_amount: float,
     repayment_after_years: int,
     mode: str,
-) -> dict:
+) -> RepaymentResult:
     return simulate_partial_repayment_events(
         principal=principal,
         annual_rate=annual_rate,
@@ -204,30 +219,30 @@ def simulate_partial_repayment_events(
     principal: float,
     annual_rate: float,
     years: int,
-    repayment_events: list[dict],
+    repayment_events: list[dict | RepaymentEvent],
     mode: str,
-) -> dict:
+) -> RepaymentResult:
     base_payment = calculate_monthly_payment(principal, annual_rate, years)
     base_schedule = build_standard_schedule(principal, annual_rate, years, base_payment)
     total_months = years * 12
 
     normalized_events = []
     for event in repayment_events:
-        amount = max(float(event.get("amount", 0)), 0)
-        after_years = max(float(event.get("after_years", 0)), 0)
+        amount = _event_amount(event)
+        after_years = _event_after_years(event)
         if amount > 0 and after_years > 0:
             month = min(max(int(round(after_years * 12)), 1), total_months)
             normalized_events.append((month, amount))
 
     if not normalized_events:
-        return {
-            "monthly_payment": base_payment,
-            "extra_payment_total": 0,
-            "months": len(base_schedule),
-            "total_interest": sum(row["interest"] for row in base_schedule),
-            "interest_saved": 0,
-            "schedule": base_schedule,
-        }
+        return RepaymentResult(
+            monthly_payment=base_payment,
+            extra_payment_total=0,
+            months=len(base_schedule),
+            total_interest=sum(row.interest for row in base_schedule),
+            interest_saved=0,
+            schedule=base_schedule,
+        )
 
     event_map: dict[int, float] = {}
     for month, amount in normalized_events:
@@ -253,14 +268,14 @@ def simulate_partial_repayment_events(
             balance -= extra_payment
 
         schedule.append(
-            {
-                "month": month,
-                "payment": interest + principal_payment + extra_payment,
-                "interest": interest,
-                "principal": principal_payment + extra_payment,
-                "extra_payment": extra_payment,
-                "balance": max(balance, 0),
-            }
+            ScheduleRow(
+                month=month,
+                payment=interest + principal_payment + extra_payment,
+                interest=interest,
+                principal=principal_payment + extra_payment,
+                extra_payment=extra_payment,
+                balance=max(balance, 0),
+            )
         )
 
         if balance <= 0:
@@ -277,15 +292,15 @@ def simulate_partial_repayment_events(
         else:
             current_payment = base_payment
 
-    base_total_interest = sum(row["interest"] for row in base_schedule)
-    total_interest = sum(row["interest"] for row in schedule)
-    total_extra_payment = sum(row["extra_payment"] for row in schedule)
+    base_total_interest = sum(row.interest for row in base_schedule)
+    total_interest = sum(row.interest for row in schedule)
+    total_extra_payment = sum(row.extra_payment for row in schedule)
 
-    return {
-        "monthly_payment": current_payment,
-        "extra_payment_total": total_extra_payment,
-        "months": len(schedule),
-        "total_interest": total_interest,
-        "interest_saved": base_total_interest - total_interest,
-        "schedule": schedule,
-    }
+    return RepaymentResult(
+        monthly_payment=current_payment,
+        extra_payment_total=total_extra_payment,
+        months=len(schedule),
+        total_interest=total_interest,
+        interest_saved=base_total_interest - total_interest,
+        schedule=schedule,
+    )

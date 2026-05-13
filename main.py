@@ -1,13 +1,22 @@
+from dataclasses import asdict
+from pathlib import Path
+
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 import streamlit.components.v1 as components
-from pathlib import Path
 
 from investment import (
     build_allocation_scenario_rows,
     build_return_scenario_rows,
     evaluate_allocation_strategy,
+)
+from models import (
+    PurchaseCosts,
+    PurchaseInputs,
+    RentalInputs,
+    RentalResult,
+    RepaymentEvent,
 )
 from mortgage import (
     build_standard_schedule,
@@ -221,32 +230,38 @@ with purchase_area:
             help="Any additional upfront cash cost not covered by the other categories.",
         )
 
-mortgage_amount = house_price * mortgage_percent / 100
-down_payment = house_price - mortgage_amount
-initial_fixed_costs = (
-    notary_cost
-    + istruttoria_cost
-    + appraisal_cost
-    + agency_cost
-    + purchase_taxes
-    + renovation_cost
-    + other_initial_costs
+purchase_inputs = PurchaseInputs(
+    house_price=house_price,
+    mortgage_percent=mortgage_percent,
+    annual_rate=annual_rate,
+    years=years,
 )
+purchase_costs = PurchaseCosts(
+    notary=notary_cost,
+    istruttoria=istruttoria_cost,
+    appraisal=appraisal_cost,
+    agency=agency_cost,
+    purchase_taxes=purchase_taxes,
+    renovation=renovation_cost,
+    other_initial=other_initial_costs,
+)
+mortgage_amount = purchase_inputs.mortgage_amount
+down_payment = purchase_inputs.down_payment
+initial_fixed_costs = purchase_costs.total
 upfront_cash_needed = down_payment + initial_fixed_costs
-monthly_payment = calculate_monthly_payment(mortgage_amount, annual_rate, years)
-total_interest = calculate_total_interest(mortgage_amount, annual_rate, years)
+monthly_payment = calculate_monthly_payment(
+    purchase_inputs.mortgage_amount,
+    purchase_inputs.annual_rate,
+    purchase_inputs.years,
+)
+total_interest = calculate_total_interest(
+    purchase_inputs.mortgage_amount,
+    purchase_inputs.annual_rate,
+    purchase_inputs.years,
+)
 
 initial_costs = pd.DataFrame(
-    [
-        ("Down payment", down_payment),
-        ("Notary", notary_cost),
-        ("Istruttoria", istruttoria_cost),
-        ("Perizia", appraisal_cost),
-        ("Agency", agency_cost),
-        ("Purchase taxes", purchase_taxes),
-        ("Renovation", renovation_cost),
-        ("Other initial costs", other_initial_costs),
-    ],
+    purchase_costs.rows(down_payment),
     columns=["Cost", "Amount"],
 )
 
@@ -358,18 +373,38 @@ with room_area:
         room_prices = [0]
         rooms = 1
 
-    monthly_costs = condo_costs + maintenance + other_costs
-    gross_rent = calculate_monthly_rental_income(rooms, room_prices, occupancy_rate)
-    net_rent = calculate_net_rental_income(gross_rent, rental_tax_rate)
-    cashflow_before_costs = net_rent - monthly_payment
-    cashflow_after_costs = net_rent - monthly_payment - monthly_costs
+    rental_inputs = RentalInputs(
+        rooms=rooms,
+        room_prices=room_prices,
+        occupancy_rate=occupancy_rate,
+        rental_tax_rate=rental_tax_rate,
+        condo_costs=condo_costs,
+        maintenance=maintenance,
+        other_costs=other_costs,
+    )
+    gross_rent = calculate_monthly_rental_income(
+        rental_inputs.rooms,
+        rental_inputs.room_prices,
+        rental_inputs.occupancy_rate,
+    )
+    net_rent = calculate_net_rental_income(gross_rent, rental_inputs.rental_tax_rate)
+    rental_result = RentalResult(
+        gross_rent=gross_rent,
+        net_rent=net_rent,
+        monthly_costs=rental_inputs.monthly_costs,
+        cashflow_before_costs=net_rent - monthly_payment,
+        cashflow_after_costs=net_rent - monthly_payment - rental_inputs.monthly_costs,
+    )
+    monthly_costs = rental_result.monthly_costs
+    cashflow_before_costs = rental_result.cashflow_before_costs
+    cashflow_after_costs = rental_result.cashflow_after_costs
 
     with rental_estimate_area:
         st.markdown("**Rental estimate**")
         estimate_col1, estimate_col2, estimate_col3 = st.columns(3)
-        estimate_col1.metric("Gross rent", money(gross_rent))
-        estimate_col2.metric("Net rent", money(net_rent))
-        estimate_col3.metric("Costs", money(monthly_costs))
+        estimate_col1.metric("Gross rent", money(rental_result.gross_rent))
+        estimate_col2.metric("Net rent", money(rental_result.net_rent))
+        estimate_col3.metric("Costs", money(rental_result.monthly_costs))
 
     with room_chart_col:
         st.subheader("Rooms Break-even")
@@ -483,12 +518,7 @@ for row in repayment_events_df.itertuples(index=False):
     after_years = coerce_positive_float(getattr(row, "after_years", 0))
     amount = coerce_positive_float(getattr(row, "amount", 0))
     if after_years > 0 and amount > 0:
-        repayment_events.append(
-            {
-                "after_years": after_years,
-                "amount": amount,
-            }
-        )
+        repayment_events.append(RepaymentEvent(after_years=after_years, amount=amount))
 
 base_schedule = build_standard_schedule(mortgage_amount, annual_rate, years, monthly_payment)
 monthly_expendable_cashflow = max(cashflow_after_costs, 0)
@@ -508,18 +538,18 @@ current_strategy = evaluate_allocation_strategy(
     analysis_horizon_years=analysis_horizon_years,
     repayment_events=repayment_events,
 )
-combined_result = current_strategy["result"]
+combined_result = current_strategy.repayment_result
 
-combined_months = current_strategy["payoff_months"]
+combined_months = current_strategy.payoff_months
 base_months = len(base_schedule)
 duration_saved_months = base_months - combined_months
-analysis_horizon_months = current_strategy["analysis_horizon_months"]
-pre_payoff_investment_months = current_strategy["pre_payoff_months"]
-post_payoff_investment_months = current_strategy["post_payoff_months"]
-post_payoff_monthly_investment = current_strategy["post_payoff_monthly_investment"]
-invested_surplus_future_value = current_strategy["pre_payoff_future_value"]
-post_payoff_invested_future_value = current_strategy["post_payoff_future_value"]
-early_repayment_benefit = current_strategy["early_repayment_benefit"]
+analysis_horizon_months = current_strategy.analysis_horizon_months
+pre_payoff_investment_months = current_strategy.pre_payoff_months
+post_payoff_investment_months = current_strategy.post_payoff_months
+post_payoff_monthly_investment = current_strategy.post_payoff_monthly_investment
+invested_surplus_future_value = current_strategy.pre_payoff_future_value
+post_payoff_invested_future_value = current_strategy.post_payoff_future_value
+early_repayment_benefit = current_strategy.early_repayment_benefit
 allocation_scenario_rows = build_allocation_scenario_rows(
     mortgage_amount=mortgage_amount,
     annual_rate=annual_rate,
@@ -548,20 +578,20 @@ best_strategy = evaluate_allocation_strategy(
     analysis_horizon_years=analysis_horizon_years,
     repayment_events=repayment_events,
 )
-best_total_value = best_strategy["total_strategy_value"]
+best_total_value = best_strategy.total_strategy_value
 allocation_scenario_df["Total value vs best model"] = (
     allocation_scenario_df["Total split value"] - best_total_value
 )
 current_total_vs_best_model = (
-    current_strategy["total_strategy_value"] - best_total_value
+    current_strategy.total_strategy_value - best_total_value
 )
 current_interest_saved_vs_best = (
-    early_repayment_benefit - best_strategy["early_repayment_benefit"]
+    early_repayment_benefit - best_strategy.early_repayment_benefit
 )
 current_portfolio_vs_best = (
-    current_strategy["strategy_future_value"] - best_strategy["strategy_future_value"]
+    current_strategy.strategy_future_value - best_strategy.strategy_future_value
 )
-current_payoff_vs_best_months = combined_months - best_strategy["payoff_months"]
+current_payoff_vs_best_months = combined_months - best_strategy.payoff_months
 current_payoff_vs_best_years = current_payoff_vs_best_months / 12
 
 scenario_shares = list(range(0, 101, 10))
@@ -612,9 +642,9 @@ scenario_fig.update_yaxes(
 )
 
 with combined_controls_col:
-    combined_projection = pd.DataFrame(combined_result["schedule"])
+    combined_projection = pd.DataFrame(asdict(row) for row in combined_result.schedule)
     combined_projection["scenario"] = "Combined strategy"
-    base_projection = pd.DataFrame(base_schedule)
+    base_projection = pd.DataFrame(asdict(row) for row in base_schedule)
     base_projection["scenario"] = "Base mortgage"
     combined_balance_projection = pd.concat(
         [base_projection, combined_projection],
@@ -635,7 +665,7 @@ with combined_controls_col:
     )
     for event in repayment_events:
         combined_balance_fig.add_vline(
-            x=event["after_years"],
+            x=event.after_years,
             line_dash="dot",
             line_color="#6b7280",
         )
@@ -678,19 +708,19 @@ with combined_chart_col:
 
     best_row2_col1.metric(
         "Payoff",
-        f"{best_strategy['payoff_months'] / 12:.1f} years",
+        f"{best_strategy.payoff_months / 12:.1f} years",
     )
     best_row2_col2.metric(
         "Interest saved",
-        money(best_strategy["early_repayment_benefit"]),
+        money(best_strategy.early_repayment_benefit),
     )
     best_row2_col3.metric(
         "Portfolio",
-        money(best_strategy["strategy_future_value"]),
+        money(best_strategy.strategy_future_value),
     )
     best_row2_col4.metric(
         "Total value",
-        money(best_strategy["total_strategy_value"]),
+        money(best_strategy.total_strategy_value),
     )
     st.markdown("---")
     st.markdown("#### **Selected split**")
@@ -722,12 +752,12 @@ with combined_chart_col:
     )
     selected_row2_col3.metric(
         "Portfolio",
-        money(current_strategy["strategy_future_value"]),
+        money(current_strategy.strategy_future_value),
         money_delta(current_portfolio_vs_best),
     )
     selected_row2_col4.metric(
         "Total value",
-        money(current_strategy["total_strategy_value"]),
+        money(current_strategy.total_strategy_value),
         money_delta(current_total_vs_best_model),
     )
     st.markdown("---")
@@ -818,15 +848,15 @@ with details_area:
             ("Post-payoff investment months", f"{post_payoff_investment_months} months"),
             ("Pre-payoff surplus future value", money(invested_surplus_future_value)),
             ("Post-payoff invested value", money(post_payoff_invested_future_value)),
-            ("One-off repayment events", money(sum(event["amount"] for event in repayment_events))),
-            ("Selected split portfolio value", money(current_strategy["strategy_future_value"])),
-            ("Selected split total value", money(current_strategy["total_strategy_value"])),
+            ("One-off repayment events", money(sum(event.amount for event in repayment_events))),
+            ("Selected split portfolio value", money(current_strategy.strategy_future_value)),
+            ("Selected split total value", money(current_strategy.total_strategy_value)),
             ("Selected split vs best split", money(current_total_vs_best_model)),
             ("Selected split payoff vs best split", f"{current_payoff_vs_best_years:+.1f} years"),
             ("Best modeled repayment share", f"{int(best_allocation['Repayment share'])}%"),
             ("Best modeled investment share", f"{int(best_allocation['Investment share'])}%"),
             ("Best modeled total value", money(best_total_value)),
-            ("Interest saved", money(combined_result["interest_saved"])),
+            ("Interest saved", money(combined_result.interest_saved)),
             ("Base duration saved", f"{duration_saved_months} months"),
             ("Combined payoff duration", f"{combined_months} months"),
         ],

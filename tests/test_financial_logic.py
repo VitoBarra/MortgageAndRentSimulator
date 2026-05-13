@@ -8,6 +8,16 @@ from mortgage import (
     calculate_total_interest,
     simulate_combined_repayment,
 )
+from models import (
+    AllocationInputs,
+    PurchaseCosts,
+    PurchaseInputs,
+    RentalInputs,
+    RentalResult,
+    RepaymentResult,
+    RepaymentEvent,
+    ScheduleRow,
+)
 from rental import calculate_monthly_rental_income, calculate_net_rental_income
 from scenarios import build_room_scenarios
 
@@ -39,9 +49,10 @@ class MortgageCalculationTests(unittest.TestCase):
         )
 
         self.assertEqual(len(schedule), 360)
-        self.assertAlmostEqual(schedule[-1]["balance"], 0, places=6)
-        self.assertGreater(schedule[0]["interest"], schedule[-1]["interest"])
-        self.assertLess(schedule[0]["principal"], schedule[-1]["principal"])
+        self.assertIsInstance(schedule[0], ScheduleRow)
+        self.assertAlmostEqual(schedule[-1].balance, 0, places=6)
+        self.assertGreater(schedule[0].interest, schedule[-1].interest)
+        self.assertLess(schedule[0].principal, schedule[-1].principal)
 
     def test_total_interest_matches_schedule_interest_sum(self):
         principal = 100_000
@@ -50,7 +61,7 @@ class MortgageCalculationTests(unittest.TestCase):
 
         total_interest = calculate_total_interest(principal, annual_rate, years)
         schedule_interest = sum(
-            row["interest"]
+            row.interest
             for row in build_standard_schedule(principal, annual_rate, years)
         )
 
@@ -70,10 +81,11 @@ class MortgageCalculationTests(unittest.TestCase):
             repayment_events=[],
         )
 
-        self.assertLess(result["months"], len(base_schedule))
-        self.assertGreater(result["interest_saved"], 0)
-        self.assertGreater(result["extra_payment_total"], 0)
-        self.assertAlmostEqual(result["schedule"][-1]["balance"], 0, places=6)
+        self.assertIsInstance(result, RepaymentResult)
+        self.assertLess(result.months, len(base_schedule))
+        self.assertGreater(result.interest_saved, 0)
+        self.assertGreater(result.extra_payment_total, 0)
+        self.assertAlmostEqual(result.schedule[-1].balance, 0, places=6)
 
     def test_combined_repayment_applies_one_off_events(self):
         result = simulate_combined_repayment(
@@ -84,9 +96,9 @@ class MortgageCalculationTests(unittest.TestCase):
             repayment_events=[{"after_years": 1, "amount": 10_000}],
         )
 
-        event_month = result["schedule"][11]
-        self.assertGreaterEqual(event_month["extra_payment"], 10_000)
-        self.assertEqual(result["event_total"], 10_000)
+        event_month = result.schedule[11]
+        self.assertGreaterEqual(event_month.extra_payment, 10_000)
+        self.assertEqual(result.event_total, 10_000)
 
 
 class RentalCalculationTests(unittest.TestCase):
@@ -110,6 +122,70 @@ class RentalCalculationTests(unittest.TestCase):
 
     def test_net_rental_income_applies_tax_rate(self):
         self.assertEqual(calculate_net_rental_income(1_000, 21), 790)
+
+
+class ModelTests(unittest.TestCase):
+    def test_purchase_inputs_calculate_financed_and_cash_parts(self):
+        purchase = PurchaseInputs(
+            house_price=140_000,
+            mortgage_percent=80,
+            annual_rate=3.5,
+            years=30,
+        )
+
+        self.assertEqual(purchase.mortgage_amount, 112_000)
+        self.assertEqual(purchase.down_payment, 28_000)
+
+    def test_purchase_costs_total_and_rows_include_down_payment(self):
+        costs = PurchaseCosts(
+            notary=3_000,
+            istruttoria=800,
+            appraisal=300,
+            agency=1_000,
+            purchase_taxes=1_500,
+            renovation=2_000,
+            other_initial=500,
+        )
+
+        self.assertEqual(costs.total, 9_100)
+        self.assertEqual(
+            costs.rows(down_payment=20_000),
+            [
+                ("Down payment", 20_000),
+                ("Notary", 3_000),
+                ("Istruttoria", 800),
+                ("Perizia", 300),
+                ("Agency", 1_000),
+                ("Purchase taxes", 1_500),
+                ("Renovation", 2_000),
+                ("Other initial costs", 500),
+            ],
+        )
+
+    def test_rental_inputs_calculate_monthly_costs(self):
+        rental = RentalInputs(
+            rooms=3,
+            room_prices=[400, 425, 450],
+            occupancy_rate=90,
+            rental_tax_rate=21,
+            condo_costs=80,
+            maintenance=70,
+            other_costs=20,
+        )
+
+        self.assertEqual(rental.monthly_costs, 170)
+
+    def test_rental_result_groups_cashflow_outputs(self):
+        result = RentalResult(
+            gross_rent=1_000,
+            net_rent=790,
+            monthly_costs=170,
+            cashflow_before_costs=300,
+            cashflow_after_costs=130,
+        )
+
+        self.assertEqual(result.net_rent, 790)
+        self.assertEqual(result.cashflow_after_costs, 130)
 
 
 class ScenarioCalculationTests(unittest.TestCase):
@@ -157,16 +233,46 @@ class InvestmentFormulaTests(unittest.TestCase):
             repayment_events=[],
         )
 
-        self.assertEqual(strategy["repayment_share"], 40)
-        self.assertEqual(strategy["investment_share"], 60)
-        self.assertEqual(strategy["recurring_extra_principal"], 200)
-        self.assertEqual(strategy["monthly_investment"], 300)
-        self.assertGreater(strategy["strategy_future_value"], 0)
-        self.assertGreater(strategy["early_repayment_benefit"], 0)
+        self.assertEqual(strategy.repayment_share, 40)
+        self.assertEqual(strategy.investment_share, 60)
+        self.assertEqual(strategy.recurring_extra_principal, 200)
+        self.assertEqual(strategy.monthly_investment, 300)
+        self.assertGreater(strategy.strategy_future_value, 0)
+        self.assertGreater(strategy.early_repayment_benefit, 0)
         self.assertAlmostEqual(
-            strategy["total_strategy_value"],
-            strategy["strategy_future_value"] + strategy["early_repayment_benefit"],
+            strategy.total_strategy_value,
+            strategy.strategy_future_value + strategy.early_repayment_benefit,
         )
+
+    def test_evaluate_allocation_inputs_returns_typed_result(self):
+        from investment import evaluate_allocation_inputs
+
+        result = evaluate_allocation_inputs(
+            AllocationInputs(
+                mortgage_amount=100_000,
+                annual_rate=3,
+                years=30,
+                monthly_expendable_cashflow=500,
+                net_rent=1_500,
+                monthly_costs=300,
+                repayment_share=40,
+                alternative_return=4,
+                analysis_horizon_years=30,
+                repayment_events=[RepaymentEvent(after_years=1, amount=10_000)],
+            )
+        )
+
+        self.assertEqual(result.repayment_share, 40)
+        self.assertEqual(result.investment_share, 60)
+        self.assertEqual(result.recurring_extra_principal, 200)
+        self.assertEqual(result.monthly_investment, 300)
+        self.assertEqual(result.repayment_result.event_total, 10_000)
+
+    def test_repayment_event_from_mapping_normalizes_negative_values(self):
+        event = RepaymentEvent.from_mapping({"after_years": -1, "amount": -500})
+
+        self.assertEqual(event.after_years, 0)
+        self.assertEqual(event.amount, 0)
 
     def test_allocation_scenario_rows_are_generated_for_requested_shares(self):
         from investment import build_allocation_scenario_rows
@@ -180,7 +286,7 @@ class InvestmentFormulaTests(unittest.TestCase):
             monthly_costs=300,
             alternative_return=4,
             analysis_horizon_years=30,
-            repayment_events=[],
+            repayment_events=[RepaymentEvent(after_years=1, amount=10_000)],
             repayment_shares=[0, 50, 100],
         )
 
