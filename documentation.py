@@ -93,6 +93,18 @@ def render_documentation_section(container) -> None:
 principal_payment = monthly_payment - interest
 balance = balance - principal_payment""",
             )
+            documentation_formula(
+                formula_view,
+                "**French amortization.** The monthly payment is constant; interest declines over time and principal repayment increases.",
+                r"M_t = M",
+                "payment = constant_monthly_payment",
+            )
+            documentation_formula(
+                formula_view,
+                "**Italian amortization.** Principal repayment is constant; total monthly payment declines as interest declines.",
+                r"Q_t = \frac{P}{n} \qquad M_t = Q_t + I_t",
+                "principal_payment = principal / months\npayment = principal_payment + interest",
+            )
 
         with st.expander("Rental income and cashflow", expanded=False):
             documentation_formula(

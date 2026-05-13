@@ -26,6 +26,8 @@ from models import (
     RepaymentEvent,
 )
 from mortgage import (
+    AMORTIZATION_METHODS,
+    FRENCH_AMORTIZATION,
     build_standard_schedule,
     calculate_monthly_payment,
     calculate_total_interest,
@@ -159,6 +161,12 @@ with purchase_area:
             1,
             help="Mortgage term in years for the base repayment schedule.",
         )
+        amortization_method = purchase_col1.selectbox(
+            "Amortization method",
+            AMORTIZATION_METHODS,
+            index=AMORTIZATION_METHODS.index(FRENCH_AMORTIZATION),
+            help="French amortization uses a constant monthly payment. Italian amortization uses constant principal, so payments decline over time.",
+        )
 
         st.subheader("Initial Costs")
         st.markdown("**Professional fees**")
@@ -226,6 +234,7 @@ purchase_inputs = PurchaseInputs(
     mortgage_percent=mortgage_percent,
     annual_rate=annual_rate,
     years=years,
+    amortization_method=amortization_method,
 )
 purchase_costs = PurchaseCosts(
     notary=notary_cost,
@@ -244,11 +253,18 @@ monthly_payment = calculate_monthly_payment(
     purchase_inputs.mortgage_amount,
     purchase_inputs.annual_rate,
     purchase_inputs.years,
+    purchase_inputs.amortization_method,
+)
+monthly_payment_label = (
+    "Monthly payment"
+    if amortization_method == FRENCH_AMORTIZATION
+    else "Initial monthly payment"
 )
 total_interest = calculate_total_interest(
     purchase_inputs.mortgage_amount,
     purchase_inputs.annual_rate,
     purchase_inputs.years,
+    purchase_inputs.amortization_method,
 )
 
 initial_costs = pd.DataFrame(
@@ -492,7 +508,13 @@ for row in repayment_events_df.itertuples(index=False):
     if after_years > 0 and amount > 0:
         repayment_events.append(RepaymentEvent(after_years=after_years, amount=amount))
 
-base_schedule = build_standard_schedule(mortgage_amount, annual_rate, years, monthly_payment)
+base_schedule = build_standard_schedule(
+    mortgage_amount,
+    annual_rate,
+    years,
+    monthly_payment,
+    amortization_method,
+)
 monthly_expendable_cashflow = max(cashflow_after_costs, 0)
 monthly_cashflow_deficit = max(-cashflow_after_costs, 0)
 rent_surplus_to_mortgage = monthly_expendable_cashflow * repayment_share / 100
@@ -502,6 +524,7 @@ current_strategy = evaluate_allocation_strategy(
     mortgage_amount=mortgage_amount,
     annual_rate=annual_rate,
     years=years,
+    amortization_method=amortization_method,
     monthly_expendable_cashflow=monthly_expendable_cashflow,
     net_rent=net_rent,
     monthly_costs=monthly_costs,
@@ -526,6 +549,7 @@ allocation_scenario_rows = build_allocation_scenario_rows(
     mortgage_amount=mortgage_amount,
     annual_rate=annual_rate,
     years=years,
+    amortization_method=amortization_method,
     monthly_expendable_cashflow=monthly_expendable_cashflow,
     net_rent=net_rent,
     monthly_costs=monthly_costs,
@@ -542,6 +566,7 @@ best_strategy = evaluate_allocation_strategy(
     mortgage_amount=mortgage_amount,
     annual_rate=annual_rate,
     years=years,
+    amortization_method=amortization_method,
     monthly_expendable_cashflow=monthly_expendable_cashflow,
     net_rent=net_rent,
     monthly_costs=monthly_costs,
@@ -572,6 +597,7 @@ scenario_rows = build_return_scenario_rows(
     mortgage_amount=mortgage_amount,
     annual_rate=annual_rate,
     years=years,
+    amortization_method=amortization_method,
     monthly_expendable_cashflow=monthly_expendable_cashflow,
     net_rent=net_rent,
     monthly_costs=monthly_costs,
@@ -705,12 +731,13 @@ with surplus_allocation_area:
 
 with summary_area:
     st.subheader("Summary")
-    summary_col1, summary_col2, summary_col3, summary_col4, summary_col5 = st.columns(5)
+    summary_col1, summary_col2, summary_col3, summary_col4, summary_col5, summary_col6 = st.columns(6)
     summary_col1.metric("Upfront cash", money(upfront_cash_needed))
     summary_col2.metric("Mortgage amount", money(mortgage_amount))
-    summary_col3.metric("Monthly payment", money(monthly_payment))
-    summary_col4.metric("Net rent", money(net_rent))
-    summary_col5.metric("Monthly cashflow", money(cashflow_after_costs))
+    summary_col3.metric(monthly_payment_label, money(monthly_payment))
+    summary_col4.metric("Total interest", money(total_interest))
+    summary_col5.metric("Net rent", money(net_rent))
+    summary_col6.metric("Monthly cashflow", money(cashflow_after_costs))
 
 with details_area:
     st.divider()
@@ -724,7 +751,8 @@ with details_area:
             ("Down payment", money(down_payment)),
             ("Annual interest rate", f"{annual_rate:.1f}%"),
             ("Mortgage duration", f"{years} years"),
-            ("Monthly payment", money(monthly_payment)),
+            ("Amortization method", amortization_method),
+            (monthly_payment_label, money(monthly_payment)),
             ("Base total interest", money(total_interest)),
         ],
         columns=["Item", "Value"],

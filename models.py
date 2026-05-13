@@ -30,6 +30,7 @@ class PurchaseInputs:
     mortgage_percent: float
     annual_rate: float
     years: int
+    amortization_method: str
 
     @property
     def mortgage_amount(self) -> float:
@@ -117,6 +118,7 @@ class AllocationInputs:
     mortgage_amount: float
     annual_rate: float
     years: int
+    amortization_method: str
     monthly_expendable_cashflow: float
     net_rent: float
     monthly_costs: float

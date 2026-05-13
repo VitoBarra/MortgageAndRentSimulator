@@ -48,6 +48,7 @@ Contains the core purchase assumptions:
 - mortgage percentage
 - annual interest rate
 - mortgage duration
+- amortization method: French amortization (constant payment) or Italian amortization (constant principal with declining payments)
 - grouped initial purchase costs for professional fees, bank fees and taxes, property setup, and other upfront costs
 
 Notary and agency costs can be entered either as fixed euro amounts or as percentages of the house price.

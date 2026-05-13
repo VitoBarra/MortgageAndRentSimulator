@@ -2,6 +2,8 @@ import math
 import unittest
 
 from mortgage import (
+    FRENCH_AMORTIZATION,
+    ITALIAN_AMORTIZATION,
     build_standard_schedule,
     calculate_monthly_payment,
     calculate_monthly_payment_for_months,
@@ -53,6 +55,30 @@ class MortgageCalculationTests(unittest.TestCase):
         self.assertAlmostEqual(schedule[-1].balance, 0, places=6)
         self.assertGreater(schedule[0].interest, schedule[-1].interest)
         self.assertLess(schedule[0].principal, schedule[-1].principal)
+
+    def test_italian_amortization_has_constant_principal_and_declining_payment(self):
+        schedule = build_standard_schedule(
+            principal=120_000,
+            annual_rate=3,
+            years=10,
+            amortization_method=ITALIAN_AMORTIZATION,
+        )
+
+        self.assertEqual(len(schedule), 120)
+        self.assertAlmostEqual(schedule[0].principal, 1_000, places=6)
+        self.assertAlmostEqual(schedule[-1].principal, 1_000, places=6)
+        self.assertGreater(schedule[0].payment, schedule[-1].payment)
+        self.assertAlmostEqual(schedule[-1].balance, 0, places=6)
+
+    def test_french_amortization_has_constant_payment(self):
+        schedule = build_standard_schedule(
+            principal=120_000,
+            annual_rate=3,
+            years=10,
+            amortization_method=FRENCH_AMORTIZATION,
+        )
+
+        self.assertAlmostEqual(schedule[0].payment, schedule[1].payment, places=6)
 
     def test_total_interest_matches_schedule_interest_sum(self):
         principal = 100_000
@@ -131,6 +157,7 @@ class ModelTests(unittest.TestCase):
             mortgage_percent=80,
             annual_rate=3.5,
             years=30,
+            amortization_method=FRENCH_AMORTIZATION,
         )
 
         self.assertEqual(purchase.mortgage_amount, 112_000)
@@ -224,6 +251,7 @@ class InvestmentFormulaTests(unittest.TestCase):
             mortgage_amount=100_000,
             annual_rate=3,
             years=30,
+            amortization_method=FRENCH_AMORTIZATION,
             monthly_expendable_cashflow=500,
             net_rent=1_500,
             monthly_costs=300,
@@ -252,6 +280,7 @@ class InvestmentFormulaTests(unittest.TestCase):
                 mortgage_amount=100_000,
                 annual_rate=3,
                 years=30,
+                amortization_method=FRENCH_AMORTIZATION,
                 monthly_expendable_cashflow=500,
                 net_rent=1_500,
                 monthly_costs=300,
@@ -281,6 +310,7 @@ class InvestmentFormulaTests(unittest.TestCase):
             mortgage_amount=100_000,
             annual_rate=3,
             years=30,
+            amortization_method=FRENCH_AMORTIZATION,
             monthly_expendable_cashflow=500,
             net_rent=1_500,
             monthly_costs=300,
@@ -301,6 +331,7 @@ class InvestmentFormulaTests(unittest.TestCase):
             mortgage_amount=100_000,
             annual_rate=3,
             years=30,
+            amortization_method=FRENCH_AMORTIZATION,
             monthly_expendable_cashflow=500,
             net_rent=1_500,
             monthly_costs=300,
